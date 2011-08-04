@@ -1,0 +1,9 @@
+1. Overview
+VAAPI driver for IMG VXD375/385 and VEX250/285 video engines
+1) support IMG VXD375/385 MPEG4/2/H264/VC1 decode HW acceleration 
+2) support IMG VXE250/285 MPEG4/H264/H263 encode HW accleratoin 
+3) support post-processing by DC/overlay and GPU 
+4) support MeeGO and Android Operating System
+
+2. Build requirements
+
