@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -95,7 +95,7 @@ typedef enum _SHPROFILES {
 /* Level number definitions (integer level numbers, non-intermediary only.. except level 1b) */
 typedef enum _SHLEVELS {
     SH_LEVEL_1 = 10,
-    SH_LEVEL_1B = 111,
+    SH_LEVEL_1B = 11,
     SH_LEVEL_11 = 11,
     SH_LEVEL_12 = 12,
     SH_LEVEL_13 = 13,
@@ -225,7 +225,7 @@ typedef enum _H263_SOURCE_FORMAT_ENUM {
 
 /* H264 header preparation */
 void pnw__H264_prepare_sequence_header(
-    IMG_UINT32 *pHeaderMemory,
+    unsigned char *pHeaderMemory,
     IMG_UINT32 uiPicWidthInMbs,
     IMG_UINT32 uiPicHeightInMbs,
     IMG_BOOL VUI_present, H264_VUI_PARAMS *VUI_params,
@@ -233,10 +233,10 @@ void pnw__H264_prepare_sequence_header(
     IMG_UINT8 uiLevel,
     IMG_UINT8 uiProfile);
 
-void pnw__H264_prepare_picture_header(IMG_UINT32 *pHeaderMemory, IMG_BOOL bCabacEnaled, IMG_INT8 CQPOffset);
+void pnw__H264_prepare_picture_header(unsigned char *pHeaderMemory, IMG_BOOL bCabacEnaled, IMG_INT8 CQPOffset);
 
 void pnw__H264_prepare_slice_header(
-    IMG_UINT32 *pHeaderMemory,
+    unsigned char *pHeaderMemory,
     IMG_BOOL    bIntraSlice,
     IMG_UINT32 uiDisableDeblockingFilterIDC,
     IMG_UINT32 uiFrameNumber,
@@ -248,14 +248,14 @@ void pnw__H264_prepare_slice_header(
     IMG_BOOL bIsLOngTermRef,
     IMG_UINT16 uiIdrPicId);
 
-void pnw__H264_prepare_eodofstream_header(IMG_UINT32 *pHeaderMemory);
-void pnw__H264_prepare_endofpicture_header(IMG_UINT32 *pHeaderMemory);
-void pnw__H264_prepare_endofsequence_header(IMG_UINT32 *pHeaderMemory);
+void pnw__H264_prepare_eodofstream_header(unsigned char *pHeaderMemory);
+void pnw__H264_prepare_endofpicture_header(unsigned char *pHeaderMemory);
+void pnw__H264_prepare_endofsequence_header(unsigned char *pHeaderMemory);
 
 
 /* MPEG4 header preparation */
 void pnw__MPEG4_prepare_sequence_header(
-    IMG_UINT32 *pHeaderMemory,
+    unsigned char *pHeaderMemory,
     IMG_BOOL bBFrame,
     MPEG4_PROFILE_TYPE sProfile,
     IMG_UINT8 Profile_and_level_indication,
@@ -266,7 +266,7 @@ void pnw__MPEG4_prepare_sequence_header(
     IMG_UINT32 VopTimeResolution);
 
 void pnw__MPEG4_prepare_vop_header(
-    IMG_UINT32 *pHeaderMem,
+    unsigned char *pHeaderMem,
     IMG_BOOL bIsVOP_coded,
     IMG_UINT32 VOP_time_increment,
     IMG_UINT8 sSearch_range,
@@ -276,11 +276,11 @@ void pnw__MPEG4_prepare_vop_header(
 
 /* H263 header preparation */
 void pnw__H263_prepare_sequence_header(
-    IMG_UINT32 *pHeaderMem,
+    unsigned char *pHeaderMem,
     IMG_UINT8 Profile_and_level_indication);
 
 void pnw__H263_prepare_picture_header(
-    IMG_UINT32 *pHeaderMem,
+    unsigned char *pHeaderMem,
     IMG_UINT8 Temporal_Ref,
     H263_PICTURE_CODING_TYPE PictureCodingType,
     H263_SOURCE_FORMAT_TYPE SourceFormatType,
@@ -289,7 +289,7 @@ void pnw__H263_prepare_picture_header(
     IMG_UINT16 PictureHeigth);
 
 void pnw__H263_prepare_GOBslice_header(
-    IMG_UINT32 *pHeaderMem,
+    unsigned char *pHeaderMem,
     IMG_UINT8 GOBNumber,
     IMG_UINT8 GOBFrameId);
 

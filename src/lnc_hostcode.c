@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -258,14 +258,14 @@ VAStatus lnc_RenderPictureParameter(context_ENC_p ctx)
     lnc_cmdbuf_p cmdbuf = ctx->obj_context->lnc_cmdbuf;
     VAStatus vaStatus = VA_STATUS_ERROR_UNKNOWN;
 
-    psPicParams = cmdbuf->pic_params_p;
+    psPicParams = (PIC_PARAMS *)cmdbuf->pic_params_p;
 
     /* second frame will reuse some rate control parameters (IN_PARAMS_MP4)
      * so only memset picture parames except IN_PARAMS
      * BUT now IN_RC_PARAMS was reload from the cache, so it now can
      * memset entirE PIC_PARAMS
      */
-    memset(psPicParams, 0, (int)((void *)&psPicParams->sInParams - (void *)psPicParams));
+    memset(psPicParams, 0, (int)((unsigned char *)&psPicParams->sInParams - (unsigned char *)psPicParams));
 
     src_surface = ctx->src_surface;
     if (NULL == src_surface) {
@@ -469,6 +469,7 @@ static VAStatus lnc__PatchBitsConsumedInRCParam(context_ENC_p ctx)
     /* PIC_PARAMS  *psPicParams = cmdbuf->pic_params_p; */
     VAStatus vaStatus;
 
+    (void)cmdbuf;
     /* it will wait until last encode session is done */
     /* now it just wait the last session is done and the frame skip
      * is  */
@@ -517,7 +518,7 @@ static VAStatus lnc_RedoRenderPictureSkippedFrame(context_ENC_p ctx)
         FirstMBAddress = (pBuffer->start_row_number * ctx->Width) / 16;
         /* Insert Do Header command, relocation is needed */
 
-        lnc__H264_prepare_slice_header(cmdbuf->header_mem_p + ctx->slice_header_ofs + i * HEADER_SIZE,
+        lnc__H264_prepare_slice_header((IMG_UINT32 *)(cmdbuf->header_mem_p + ctx->slice_header_ofs + i * HEADER_SIZE),
                                        0, /*pBuffer->slice_flags.bits.is_intra*/
                                        pBuffer->slice_flags.bits.disable_deblocking_filter_idc,
                                        ctx->obj_context->frame_count,
@@ -538,7 +539,7 @@ static VAStatus lnc_RedoRenderPictureSkippedFrame(context_ENC_p ctx)
     break;
     case IMG_CODEC_MPEG4_VBR:
     case IMG_CODEC_MPEG4_CBR: /* only picture header need redo */
-        lnc__MPEG4_prepare_vop_header(cmdbuf->header_mem_p + ctx->pic_header_ofs,
+        lnc__MPEG4_prepare_vop_header((IMG_UINT32 *)(cmdbuf->header_mem_p + ctx->pic_header_ofs),
                                       IMG_FALSE /* bIsVOPCoded is false now */,
                                       ctx->MPEG4_vop_time_increment_frameskip, /* In testbench, this should be FrameNum */
                                       4,/* default value is 4,search range */
@@ -560,7 +561,7 @@ static VAStatus lnc_RedoRenderPictureSkippedFrame(context_ENC_p ctx)
 static VAStatus lnc_SetupRCParam(context_ENC_p ctx)
 {
     lnc_cmdbuf_p cmdbuf = ctx->obj_context->lnc_cmdbuf;
-    PIC_PARAMS  *psPicParams = cmdbuf->pic_params_p;
+    PIC_PARAMS  *psPicParams = (PIC_PARAMS  *)cmdbuf->pic_params_p;
     int origin_qp;/* in DDK setup_rc will change qp strangly,
                    * just for keep same with DDK
                    */
@@ -576,7 +577,7 @@ static VAStatus lnc_SetupRCParam(context_ENC_p ctx)
     ctx->sRCParams.InitialQp = origin_qp;
 
     /* save IN_RC_PARAMS into the cache */
-    memcpy(&ctx->in_params_cache, (void *)&psPicParams->sInParams, sizeof(IN_RC_PARAMS));
+    memcpy(&ctx->in_params_cache, (unsigned char *)&psPicParams->sInParams, sizeof(IN_RC_PARAMS));
 
     return VA_STATUS_SUCCESS;
 }
@@ -585,7 +586,7 @@ static VAStatus lnc_UpdateRCParam(context_ENC_p ctx)
 {
     int origin_qp;
     lnc_cmdbuf_p cmdbuf = ctx->obj_context->lnc_cmdbuf;
-    PIC_PARAMS  *psPicParams = cmdbuf->pic_params_p;
+    PIC_PARAMS  *psPicParams = (PIC_PARAMS  *)cmdbuf->pic_params_p;
 
     origin_qp = ctx->sRCParams.InitialQp;
 
@@ -604,7 +605,7 @@ static VAStatus lnc_UpdateRCParam(context_ENC_p ctx)
     }
 
     /* save IN_RC_PARAMS into the cache */
-    memcpy(&ctx->in_params_cache, (void *)&psPicParams->sInParams, sizeof(IN_RC_PARAMS));
+    memcpy(&ctx->in_params_cache, (unsigned char *)&psPicParams->sInParams, sizeof(IN_RC_PARAMS));
 
     return VA_STATUS_SUCCESS;
 }
@@ -682,7 +683,7 @@ VAStatus lnc_EndPicture(context_ENC_p ctx)
 
 static void lnc__setup_busize(context_ENC_p ctx)
 {
-    int old_busize = ctx->sRCParams.BUSize;
+    unsigned int old_busize = ctx->sRCParams.BUSize;
 
     /* it is called at EndPicture, we should now the Slice number */
     ctx->Slices = ctx->obj_context->slice_count;
@@ -793,7 +794,7 @@ void lnc__setup_rcdata(
     PIC_PARAMS *psPicParams,
     IMG_RC_PARAMS *psRCParams)
 {
-    IMG_INT32   max_bitrate = psContext->Width * psContext->Height * 1.5 * 8 * 60;
+    IMG_UINT32   max_bitrate = psContext->Width * psContext->Height * 1.5 * 8 * 60;
     IMG_UINT8 InitialSeInitQP = 0;
 
     /* frameskip is always cleared, specially handled at vaEndPicture */
@@ -1182,7 +1183,7 @@ static void lnc__setup_slice_row_params(
 
     tmp = (CurrentRowY != SliceStartRowY);
 
-    for (Pos = 0; Pos < ctx->Width; Pos += 16, psCurrent++) {
+    for (Pos = 0; Pos < (int)ctx->Width; Pos += 16, psCurrent++) {
         memset(psCurrent, 0, sizeof(MTX_CURRENT_IN_PARAMS));
         psCurrent->MVValid = 0;
         psCurrent->ParamsValid = 0;
@@ -1192,12 +1193,12 @@ static void lnc__setup_slice_row_params(
             psCurrent->MVValid = 66;
             psCurrent->ParamsValid |= PARAMS_ABOVE_VALID;
 
-            if (Pos + 16 < ctx->Width) {
+            if (Pos + 16 < (int)ctx->Width) {
                 psCurrent->ParamsValid |= PARAMS_ABOVER_VALID;
                 psCurrent->MVValid |= 4; /* (1<<2) */
             }
 
-            if (Pos > 0 && (Pos < ctx->Width)) {
+            if (Pos > 0 && (Pos < (int)ctx->Width)) {
                 psCurrent->ParamsValid |= PARAMS_ABOVEL_VALID;
                 psCurrent->MVValid |= 1; /* (1<<0) */
             }
@@ -1210,7 +1211,7 @@ static void lnc__setup_slice_row_params(
             psCurrent->MVValid |= 72; /* (1<<3)+(1<<6) */
             psCurrent->ParamsValid |= 8; /* (1<<3) */
         }
-        if (Pos == ctx->Width - 16) {
+        if (Pos == (int)(ctx->Width - 16)) {
             /* indicate the last MB in a row */
             psCurrent->ParamsValid |= MB_END_OF_ROW;
             /* are we the last mb in the slice? */
@@ -1244,7 +1245,7 @@ static void lnc__setup_slice_row_params(
             psCurrent->IPEMin[0] = 3;
         }
 
-        if ((Pos + 48 + 16) > ctx->Width) {
+        if ((Pos + 48 + 16) > (int)ctx->Width) {
             psCurrent->IPEMax[0] = (47 + ctx->Width) - Pos; /* (112 - 1) - ((Pos + 48+16) - ctx->Width); */
             psCurrent->RealEdge |= SPE_EDGE_RIGHT;
         } else {
@@ -1352,7 +1353,7 @@ IMG_UINT32 lnc__send_encode_slice_params(
     IMG_UINT32 MaxSliceSize)
 {
     SLICE_PARAMS *psSliceParams;
-    IMG_INT16 RowOffset;
+    IMG_UINT16 RowOffset;
 
     psb_buffer_p psCoded;
     object_surface_p ref_surface;
@@ -1458,7 +1459,7 @@ IMG_UINT32 lnc__send_encode_slice_params(
  */
 void lnc_reset_encoder_params(context_ENC_p ctx)
 {
-    void *Add_Below, *Add_Above;
+    unsigned char *Add_Below, *Add_Above;
     lnc_cmdbuf_p cmdbuf = ctx->obj_context->lnc_cmdbuf;
 
     /* all frames share the same Topaz param, in_param/aboveparam/bellow

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -86,11 +86,21 @@ static void lnc_MPEG4ES_QueryConfigAttributes(
 static VAStatus lnc_MPEG4ES_ValidateConfig(
     object_config_p obj_config)
 {
-    VAStatus vaStatus = VA_STATUS_SUCCESS;
-    psb__information_message("lnc_MPEG4ES_ValidateConfig\n");
+    int i;
+    /* Check all attributes */
+    for (i = 0; i < obj_config->attrib_count; i++) {
+        switch (obj_config->attrib_list[i].type) {
+        case VAConfigAttribRTFormat:
+            /* Ignore */
+            break;
+        case VAConfigAttribRateControl:
+            break;
+        default:
+            return VA_STATUS_ERROR_ATTR_NOT_SUPPORTED;
+        }
+    }
 
-    return vaStatus;
-
+    return VA_STATUS_SUCCESS;
 }
 
 
@@ -239,7 +249,7 @@ static VAStatus lnc__MPEG4ES_process_sequence_param(context_ENC_p ctx, object_bu
     }
 
     lnc__MPEG4_prepare_sequence_header(
-        cmdbuf->header_mem_p + ctx->seq_header_ofs,
+        (IMG_UINT32 *)(cmdbuf->header_mem_p + ctx->seq_header_ofs),
         0, /* BFrame? */
         profile, /* sProfile */
         seq_params->profile_and_level_indication, /* */
@@ -300,7 +310,7 @@ static VAStatus lnc__MPEG4ES_process_picture_param(context_ENC_p ctx, object_buf
      */
     cmdbuf->cmd_idx_saved_frameskip = cmdbuf->cmd_idx;
 
-    lnc__MPEG4_prepare_vop_header(cmdbuf->header_mem_p + ctx->pic_header_ofs,
+    lnc__MPEG4_prepare_vop_header((IMG_UINT32 *)(cmdbuf->header_mem_p + ctx->pic_header_ofs),
                                   bIsVOPCoded,
                                   pBuffer->vop_time_increment, /* In testbench, this should be FrameNum */
                                   4,/* default value is 4,search range */
@@ -322,7 +332,7 @@ static VAStatus lnc__MPEG4ES_process_slice_param(context_ENC_p ctx, object_buffe
     VAEncSliceParameterBuffer *pBuffer;
     lnc_cmdbuf_p cmdbuf = ctx->obj_context->lnc_cmdbuf;
     PIC_PARAMS *psPicParams = (PIC_PARAMS *)(cmdbuf->pic_params_p);
-    int i;
+    unsigned int i;
     int slice_param_idx;
 
     ASSERT(obj_buffer->type == VAEncSliceParameterBufferType);

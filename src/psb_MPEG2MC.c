@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -860,13 +860,13 @@ static VAStatus psb__MPEG2MC_process_mbs_interPB(
     while (mb_pending || skip_count) {
         uint32_t mb_in_buffer = (ctx->picture_width_mb);
         psb_cmdbuf_p cmdbuf;
-        void *cmd_start;
+        unsigned char *cmd_start;
 
         ctx->fstmb_slice = IMG_TRUE;
 
         psb_context_get_next_cmdbuf(ctx->obj_context);
         cmdbuf = ctx->obj_context->cmdbuf;
-        cmd_start = (void *) cmdbuf->cmd_idx;
+        cmd_start = (unsigned char *) cmdbuf->cmd_idx;
 
         /* Build the high-level commands */
         psb__MPEG2MC_send_highlevel_commands(ctx);
@@ -924,7 +924,7 @@ static VAStatus psb__MPEG2MC_process_mbs_interPB(
         psb_context_submit_cmdbuf(ctx->obj_context);
 
         /* check if the remained cmdbuf size can fill the commands of next slice */
-        if (1 || (cmdbuf->lldma_base - (void *) cmdbuf->cmd_idx) < ((void *) cmdbuf->cmd_idx - cmd_start))
+        if (1 || (cmdbuf->lldma_base - (unsigned char *) cmdbuf->cmd_idx) < ((unsigned char *) cmdbuf->cmd_idx - cmd_start))
             psb_context_flush_cmdbuf(ctx->obj_context);
     }
 
@@ -1056,13 +1056,13 @@ static VAStatus psb__MPEG2MC_process_mbs_intra(
     while (mb_pending) { /* one slice per loop */
         uint32_t mb_in_buffer =  min(mb_pending, ctx->picture_width_mb);
         psb_cmdbuf_p cmdbuf;
-        void *cmd_start;
+        unsigned char *cmd_start;
 
         mb_pending -= mb_in_buffer;
 
         psb_context_get_next_cmdbuf(ctx->obj_context);
         cmdbuf = ctx->obj_context->cmdbuf;
-        cmd_start = (void *) cmdbuf->cmd_idx;
+        cmd_start = (unsigned char *) cmdbuf->cmd_idx;
 
         ctx->fstmb_slice = IMG_TRUE;
 
@@ -1103,7 +1103,7 @@ static VAStatus psb__MPEG2MC_process_mbs_intra(
         psb_context_submit_cmdbuf(ctx->obj_context);
 
         /* check if the remained cmdbuf size can fill the commands of next slice */
-        if (1 || (cmdbuf->lldma_base - (void *) cmdbuf->cmd_idx) < ((void *) cmdbuf->cmd_idx - cmd_start))
+        if (1 || (cmdbuf->lldma_base - (unsigned char *) cmdbuf->cmd_idx) < ((unsigned char *) cmdbuf->cmd_idx - cmd_start))
             psb_context_flush_cmdbuf(ctx->obj_context);
     }
 
@@ -1356,7 +1356,7 @@ static VAStatus psb_MPEG2MC_BeginPicture(
     INIT_CONTEXT_MPEG2MC;
 
 #if 0 /* clear surface for debugging */
-    void *surface_data = NULL;
+    unsigned char *surface_data = NULL;
     static psb_surface_p target_surface = NULL;
     psb_surface_p tmp = ctx->obj_context->current_render_target->psb_surface;
     if (target_surface != tmp) { /* for field picture, only reset one time */

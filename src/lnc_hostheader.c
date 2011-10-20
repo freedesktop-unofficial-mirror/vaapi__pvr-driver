@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -70,7 +70,7 @@ static void Show_Bits(
         }
 
         snprintf(Txt, sizeof(Txt), "%s ", Txt);
-        printf(Txt);
+        printf("%s", Txt);
         if ((uiLp + 1) % 8 == 0) printf("\n");
     }
 
@@ -2071,8 +2071,10 @@ void lnc__H264_prepare_sequence_header(
     IMG_UINT8 uiLevel,
     IMG_UINT8 uiProfile)
 {
-    H264_SEQUENCE_HEADER_PARAMS SHParams = {0, };
+    H264_SEQUENCE_HEADER_PARAMS SHParams;
     MTX_HEADER_PARAMS   *mtx_hdr;
+
+    memset(&SHParams, 0, sizeof(SHParams));
 
     /* Route output elements to memory provided */
     mtx_hdr = (MTX_HEADER_PARAMS *) pHeaderMemory;

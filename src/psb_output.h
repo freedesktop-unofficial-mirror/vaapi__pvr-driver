@@ -8,11 +8,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -47,9 +47,9 @@
 #define LOG_TAG "pvr_drv_video"
 #endif
 
-#define PSB_MAX_IMAGE_FORMATS      5 /* sizeof(psb__CreateImageFormat)/sizeof(VAImageFormat) */
+#define PSB_MAX_IMAGE_FORMATS      3 /* sizeof(psb__CreateImageFormat)/sizeof(VAImageFormat) */
 #define PSB_MAX_SUBPIC_FORMATS     3 /* sizeof(psb__SubpicFormat)/sizeof(VAImageFormat) */
-#define PSB_MAX_DISPLAY_ATTRIBUTES 6 /* sizeof(psb__DisplayAttribute)/sizeof(VADisplayAttribute) */
+#define PSB_MAX_DISPLAY_ATTRIBUTES 18     /* sizeof(psb__DisplayAttribute)/sizeof(VADisplayAttribute) */
 
 #define VA_SUBPICTURE_DESTINATION_IS_SCREEN_COORD       0x0004
 #define PSB_SUPPORTED_SUBPIC_FLAGS      VA_SUBPICTURE_DESTINATION_IS_SCREEN_COORD /* No alpha or chroma key support */
@@ -156,7 +156,7 @@ VAStatus psb__CreateBuffer(
     VABufferType type,      /* in */
     unsigned int size,      /* in */
     unsigned int num_elements, /* in */
-    void *data,             /* in */
+    unsigned char *data,             /* in */
     VABufferID *buf_desc    /* out */
 );
 

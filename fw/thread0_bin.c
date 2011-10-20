@@ -1,27 +1,35 @@
 /*
- * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) 2010 Intel Corporation. All rights reserved.
+ * Copyright (c) Imagination Technologies Limited, UK
+ * Redistribution. Redistribution and use in binary form, without modification,
+ * are permitted provided that the following conditions are met:
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sub license, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to
- * the following conditions:
- * 
- * The above copyright notice and this permission notice (including the
- * next paragraph) shall be included in all copies or substantial portions
- * of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL PRECISION INSIGHT AND/OR ITS SUPPLIERS BE LIABLE FOR
- * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
- * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
- * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * Redistributions must reproduce the above copyright notice and the following
+ * disclaimer in the documentation and/or other materials provided with the
+ * distribution.Neither the name of Intel Corporation nor the names of its
+ * suppliers may be used to endorse or promote products derived from this
+ * software without specific prior written permission. No reverse engineering,
+ * decompilation, or disassembly of this software is permitted.
+ * Limited patent license. Intel Corporation grants a world-wide, royalty-free,
+ * non-exclusive license under patents it now or hereafter owns or controls
+ * to make, have made, use, import,offer to sell and sell ("utilize") this
+ * software, but solely to the extent that any such patent is necessary to
+ * Utilize the software alone. The patent license shall not apply to any
+ * combinations which include this software. No hardware per se is licensed hereunder.
+ *
+ * DISCLAIMER. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+
 
 /******************************************************************************
 
@@ -1686,14 +1694,14 @@ unsigned long aui32MTXDXVAFWText[] = {
     0x4a0cb780,
     0x93647500,
     0x420cb780,
+    0x4a0cb5a0,
     0xaa09f248,
     0x7d00c004,
     0xf24890e2,
     0xc004aa35,
     0xc0057d00,
-    0x9eab9144,
-    0xb5a00986,
-    0xc0144a0c,
+    0x9eab9104,
+    0xc0140986,
     0x0d829b30,
     0xc1719e5c,
     0xf2489ccc,
@@ -1777,7 +1785,7 @@ unsigned long aui32MTXDXVAFWText[] = {
     0x9b339eab,
     0x0daa97bc,
     0xc0340982,
-    0x9754993c,
+    0x9756993c,
     0xc008a605,
     0xffb40df2,
     0xe0409a01,
@@ -3912,5 +3920,5 @@ unsigned long aui32MTXDXVAFWData[] = {
     0x00000000,
     0x00000000,
 };
-//char* psFirmwareVersion = "BUILD_DXVA_FW1.00.10.1229.02.0008_Legacy";
-//char* psFirmwareBuildDate = "09_02_2011";
+char* psFirmwareVersion = "BUILD_DXVA_FW1.00.10.1229.02.0009_Legacy";
+char* psFirmwareBuildDate = "20_04_2011";

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -495,7 +495,7 @@ IMG_ERRORCODE AllocateCodedDataBuffers(TOPAZSC_JPEG_ENCODER_CONTEXT *pContext)
             pContext->sScan_Encode_Info.aBufferTable[ui8Loop].i8MTXNumber = 0; // Indicates buffer is idle
             pContext->sScan_Encode_Info.aBufferTable[ui8Loop].ui16ScanNumber = 0; // Indicates buffer is idle
             pContext->sScan_Encode_Info.aBufferTable[ui8Loop].pMemInfo =
-                pContext->jpeg_coded_buf.pMemInfo + PNW_JPEG_HEADER_MAX_SIZE + ui8Loop * pContext->ui32SizePerCodedBuffer;
+                (unsigned char *)pContext->jpeg_coded_buf.pMemInfo + PNW_JPEG_HEADER_MAX_SIZE + ui8Loop * pContext->ui32SizePerCodedBuffer;
 
         }
 
@@ -1776,9 +1776,9 @@ IMG_ERRORCODE SubmitScanToMTX(TOPAZSC_JPEG_ENCODER_CONTEXT *pContext,
 }
 
 
-void pnw_jpeg_set_default_qmatix(void *pMemInfoTableBlock)
+void pnw_jpeg_set_default_qmatix(unsigned char *pMemInfoTableBlock)
 {
-    JPEG_MTX_QUANT_TABLE *pQTable =  pMemInfoTableBlock;
+    JPEG_MTX_QUANT_TABLE *pQTable = (JPEG_MTX_QUANT_TABLE *)pMemInfoTableBlock;
     memcpy(pQTable->aui8LumaQuantParams, gQuantLuma, QUANT_TABLE_SIZE_BYTES);
     memcpy(pQTable->aui8ChromaQuantParams, gQuantChroma, QUANT_TABLE_SIZE_BYTES);
     return;

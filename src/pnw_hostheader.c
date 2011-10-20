@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -70,7 +70,7 @@ static void Show_Bits(
         }
 
         snprintf(Txt, sizeof(Txt), "%s ", Txt);
-        printf(Txt);
+        printf("%s", Txt);
         if ((uiLp + 1) % 8 == 0) printf("\n");
     }
 
@@ -756,7 +756,8 @@ static void pnw__H264_writebits_sequence_header(
         pnw__write_upto8bits_elements(pMTX_Header,
                                       // constrain_set0_flag = 1 for BP constraints
                                       aui32ElementPointers, (0 << 7) |
-                                      (0 << 6) |        // constrain_set1_flag  = 1 for MP constraints
+                                      // constrain_set1_flag  = 1 for MP constraints and Constrained Baseline profile.
+                                      ((pSHParams->ucProfile == SH_PROFILE_BP ? 1 : 0) << 6) |
                                       (0 << 5) |        // constrain_set2_flag = 1 for HP
                                       // constrain_set3_flag = 1 for level 1b, 0 for others
                                       ((pSHParams->ucLevel == SH_LEVEL_1B ?     1 : 0) <<       4),
@@ -2407,7 +2408,7 @@ static void pnw__H264_writebits_SEI_picture_timing_header(
 
                 if (ui8time_offset_length > 0) {
                     // Two's complement storage : If time_offset<0 = ((2 ^ v) + time_offset)
-                    if (i32time_offset < 0)
+                    if ((int)i32time_offset < 0)
                         pnw__write_upto32bits_elements(pMTX_Header,
                                                        aui32ElementPointers,
                                                        (IMG_UINT32)((2 ^ ui8time_offset_length) + i32time_offset),
@@ -2574,7 +2575,7 @@ void pnw__H264_prepare_SEI_picture_timing_header(
 
 
 void pnw__H264_prepare_sequence_header(
-    IMG_UINT32 *pHeaderMemory,
+    unsigned char *pHeaderMemory,
     IMG_UINT32 uiPicWidthInMbs,
     IMG_UINT32 uiPicHeightInMbs,
     IMG_BOOL VUI_present, H264_VUI_PARAMS *VUI_params,
@@ -2582,10 +2583,11 @@ void pnw__H264_prepare_sequence_header(
     IMG_UINT8 uiLevel,
     IMG_UINT8 uiProfile)
 {
-    H264_SEQUENCE_HEADER_PARAMS SHParams = {0, };
+    H264_SEQUENCE_HEADER_PARAMS SHParams;
     MTX_HEADER_PARAMS   *mtx_hdr;
 
     /* Route output elements to memory provided */
+    memset(&SHParams, 0, sizeof(SHParams));
     mtx_hdr = (MTX_HEADER_PARAMS *) pHeaderMemory;
 
     /* Setup Sequence Header information  */
@@ -2625,11 +2627,17 @@ void pnw__H264_prepare_sequence_header(
     case 31:
         SHParams.ucLevel =  SH_LEVEL_31;
         break;
+    case 32:
+        SHParams.ucLevel =  SH_LEVEL_32;
+        break;
     case 40:
         SHParams.ucLevel =  SH_LEVEL_4;
         break;
     case 41:
         SHParams.ucLevel =  SH_LEVEL_41;
+        break;
+    case 42:
+        SHParams.ucLevel =  SH_LEVEL_42;
         break;
     default:
         SHParams.ucLevel =  SH_LEVEL_3;
@@ -2662,7 +2670,7 @@ void pnw__H264_prepare_sequence_header(
     pnw__H264_getelements_sequence_header(mtx_hdr, &SHParams, psCropParams);
 }
 
-void pnw__H264_prepare_picture_header(IMG_UINT32 *pHeaderMemory, IMG_BOOL bCabacEnabled, IMG_INT8 CQPOffset)
+void pnw__H264_prepare_picture_header(unsigned char *pHeaderMemory, IMG_BOOL bCabacEnabled, IMG_INT8 CQPOffset)
 {
     MTX_HEADER_PARAMS *mtx_hdr;
 
@@ -2686,7 +2694,7 @@ void pnw__H264_prepare_picture_header(IMG_UINT32 *pHeaderMemory, IMG_BOOL bCabac
 }
 
 void pnw__H264_prepare_slice_header(
-    IMG_UINT32 *pHeaderMemory,
+    unsigned char *pHeaderMemory,
     IMG_BOOL    bIntraSlice,
     IMG_UINT32 uiDisableDeblockingFilterIDC,
     IMG_UINT32 uiFrameNumber,
@@ -2698,8 +2706,10 @@ void pnw__H264_prepare_slice_header(
     IMG_BOOL bIsLongTermRef,
     IMG_UINT16 uiIdrPicId)
 {
-    H264_SLICE_HEADER_PARAMS SlHParams = {0};
+    H264_SLICE_HEADER_PARAMS SlHParams;
     MTX_HEADER_PARAMS *mtx_hdr;
+
+    memset(&SlHParams, 0, sizeof(SlHParams));
 
     /* Route output elements to memory provided */
     mtx_hdr = (MTX_HEADER_PARAMS *) pHeaderMemory;
@@ -2771,7 +2781,7 @@ void pnw__H264_prepare_slice_header(
 //}
 
 void pnw__MPEG4_prepare_sequence_header(
-    IMG_UINT32 *pHeaderMemory,
+    unsigned char *pHeaderMemory,
     IMG_BOOL bBFrame,
     MPEG4_PROFILE_TYPE sProfile,
     IMG_UINT8 Profile_and_level_indication,
@@ -2809,7 +2819,7 @@ void pnw__MPEG4_prepare_sequence_header(
 }
 
 void pnw__MPEG4_prepare_vop_header(
-    IMG_UINT32 *pHeaderMem,
+    unsigned char *pHeaderMem,
     IMG_BOOL bIsVOP_coded,
     IMG_UINT32 VOP_time_increment,
     IMG_UINT8 sSearch_range,
@@ -2843,7 +2853,7 @@ void pnw__MPEG4_prepare_vop_header(
 }
 
 void pnw__H263_prepare_sequence_header(
-    IMG_UINT32 *pHeaderMem,
+    unsigned char *pHeaderMem,
     IMG_UINT8 Profile_and_level_indication)
 {
     MTX_HEADER_PARAMS *mtx_hdr;
@@ -2866,7 +2876,7 @@ void pnw__H263_prepare_sequence_header(
 }
 
 void pnw__H263_prepare_picture_header(
-    IMG_UINT32 *pHeaderMem,
+    unsigned char *pHeaderMem,
     IMG_UINT8 Temporal_Ref,
     H263_PICTURE_CODING_TYPE PictureCodingType,
     H263_SOURCE_FORMAT_TYPE SourceFormatType,
@@ -2898,7 +2908,7 @@ void pnw__H263_prepare_picture_header(
 }
 
 void pnw__H263_prepare_GOBslice_header(
-    IMG_UINT32 *pHeaderMem,
+    unsigned char *pHeaderMem,
     IMG_UINT8 GOBNumber,
     IMG_UINT8 GOBFrameId)
 {

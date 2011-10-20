@@ -8,11 +8,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -49,6 +49,9 @@
 #else
 #define XID unsigned int
 #define INT16 unsigned int
+#include <cutils/log.h>
+#undef  LOG_TAG
+#define LOG_TAG "pvr_drv_video"
 #endif
 #include "hwdefs/dxva_fw_flags.h"
 #include <wsbm/wsbm_pool.h>
@@ -60,6 +63,7 @@
 #ifndef max
 #define max(a, b) ((a) > (b)) ? (a) : (b)
 #endif
+
 /*
  * WORKAROUND_DMA_OFF_BY_ONE: LLDMA requests may access one additional byte which can cause
  * a MMU fault if the next byte after the buffer end is on a different page that isn't mapped.
@@ -105,7 +109,6 @@ enum psb_output_method_t {
     PSB_PUTSURFACE_COVERLAY,/* client overlay */
     PSB_PUTSURFACE_CTEXTURE,/* client textureblit */
     PSB_PUTSURFACE_TEXSTREAMING,/* texsteaming */
-
     PSB_PUTSURFACE_FORCE_TEXTURE,/* force texture xvideo */
     PSB_PUTSURFACE_FORCE_OVERLAY,/* force overlay xvideo */
     PSB_PUTSURFACE_FORCE_CTEXTURE,/* force client textureblit */
@@ -129,6 +132,8 @@ struct psb_driver_data_s {
     char *                      bus_id;
     uint32_t                    dev_id;
     int                         drm_fd;
+    int                         dup_drm_fd;
+
     /*  PM_QoS */
     int                         pm_qos_fd;
     int                         dri2;
@@ -142,13 +147,12 @@ struct psb_driver_data_s {
     uint32_t                    msvdx_context_base;
     int                         video_sd_disabled;
     int                         video_hd_disabled;
-    void *                      camera_bo;
+    unsigned char *                      camera_bo;
     uint32_t                    camera_phyaddr;
     uint32_t                    camera_size;
-    void *                      rar_bo;
+    unsigned char *                      rar_bo;
     uint32_t                    rar_phyaddr;
     uint32_t                    rar_size;
-    void *                      rar_rd;
 
     int encode_supported;
     int decode_supported;
@@ -165,6 +169,7 @@ struct psb_driver_data_s {
 
     /* whether the post-processing use client overlay or not */
     int coverlay;
+    int coverlay_init;
     PsbPortPrivRec coverlay_priv;
 
 
@@ -178,7 +183,7 @@ struct psb_driver_data_s {
     struct psb_texstreaing ctexstreaing_priv;
     */
 
-    void *ws_priv; /* window system related data structure */
+    unsigned char *ws_priv; /* window system related data structure */
 
 
     VASurfaceID cur_displaying_surface;
@@ -216,12 +221,11 @@ struct psb_driver_data_s {
     pthread_t xrandr_thread_id;
     int extend_fullscreen;
 
-    int rotate;
-    int video_rotate;
     int drawable_info;
     int dummy_putsurface;
     int fixed_fps;
     unsigned int frame_count;
+    unsigned int overlay_idle_frame;
 
     uint32_t blend_mode;
     uint32_t blend_color;
@@ -229,14 +233,27 @@ struct psb_driver_data_s {
     uint32_t color_key;
 
     /*output rotation info*/
-    int mipi0_rotation;
-    int mipi1_rotation;
-    int hdmi_rotation;
-    int local_rotation;
-    int extend_rotation;
+    int disable_msvdx_rotate;
+    int msvdx_rotate_want; /* msvdx rotate info programed to msvdx */
+    int va_rotate; /* VA rotate passed from APP */
+    int mipi0_rotation; /* window manager rotation */
+    int mipi1_rotation; /* window manager rotation */
+    int hdmi_rotation; /* window manager rotation */
+    int local_rotation; /* final device rotate: VA rotate+wm rotate */
+    int extend_rotation; /* final device rotate: VA rotate+wm rotate */
+
+    unsigned int outputmethod_checkinterval;
+
     uint32_t bcd_id;
     uint32_t bcd_ioctrl_num;
     uint32_t bcd_registered;
+    uint32_t bcd_buffer_num;
+    int bcd_buffer_width;
+    int bcd_buffer_height;
+    int bcd_buffer_stride;
+    VASurfaceID *bcd_buffer_surfaces;
+    uint32_t ts_source_created;
+
     uint32_t xrandr_dirty;
     uint32_t xrandr_update;
     /*only VAProfileH264ConstrainedBaseline profile enable error concealment*/
@@ -246,6 +263,15 @@ struct psb_driver_data_s {
     psb_decode_info_t decode_info;
     drm_psb_msvdx_decode_status_t *msvdx_decode_status;
     VASurfaceDecodeMBErrors *surface_mb_error;
+
+    unsigned char *hPVR2DContext;
+
+    VAGenericID wrapped_surface_id[VIDEO_BUFFER_NUM];
+    VAGenericID wrapped_subpic_id[VIDEO_BUFFER_NUM];
+    PVR2DMEMINFO *videoBuf[VIDEO_BUFFER_NUM];
+    PVR2DMEMINFO *subpicBuf[VIDEO_BUFFER_NUM];
+
+    int is_android;
 };
 
 #define IS_MRST(driver_data) ((driver_data->dev_id & 0xFFFC) == 0x4100)
@@ -264,6 +290,7 @@ struct object_context_s {
     struct object_base_s base;
     VAContextID context_id;
     VAConfigID config_id;
+    VAProfile profile;
     VAEntrypoint entry_point;
     int picture_width;
     int picture_height;
@@ -275,7 +302,7 @@ struct object_context_s {
     VASurfaceID current_render_surface_id;
     psb_driver_data_p driver_data;
     format_vtable_p format_vtable;
-    void *format_data;
+    unsigned char *format_data;
     struct psb_cmdbuf_s *cmdbuf_list[PSB_MAX_CMDBUFS];
     struct lnc_cmdbuf_s *lnc_cmdbuf_list[LNC_MAX_CMDBUFS_ENCODE];
     struct pnw_cmdbuf_s *pnw_cmdbuf_list[PNW_MAX_CMDBUFS_ENCODE];
@@ -308,7 +335,8 @@ struct object_context_s {
     uint32_t last_mb;
 
     int is_oold;
-    int rotate;
+    int msvdx_rotate;
+    int interlaced_stream;
 
     uint32_t msvdx_context;
 
@@ -316,6 +344,9 @@ struct object_context_s {
     uint32_t frame_count;
     uint32_t slice_count;
 };
+
+#define ROTATE_VA2MSVDX(va_rotate)  (va_rotate)
+#define CONTEXT_ROTATE(obj_context) (obj_context->msvdx_rotate != ROTATE_VA2MSVDX(VA_ROTATION_NONE))
 
 struct object_surface_s {
     struct object_base_s base;
@@ -339,12 +370,12 @@ struct object_buffer_s {
     object_buffer_p ptr_next; /* Generic ptr for linked list */
     object_buffer_p *pptr_prev_next; /* Generic ptr for linked list */
     struct psb_buffer_s *psb_buffer;
-    void *buffer_data;
+    unsigned char *buffer_data;
     VACodedBufferSegment codedbuf_mapinfo[8]; /* for VAEncCodedBufferType */
     unsigned int size;
     unsigned int alloc_size;
-    int max_num_elements;
-    int num_elements;
+    unsigned int max_num_elements;
+    unsigned int num_elements;
     object_context_p context;
     VABufferType type;
     uint32_t last_used;
@@ -375,11 +406,11 @@ struct object_subpic_s {
     /* flags */
     unsigned int flags; /* see below */
 
-    void *surfaces; /* surfaces, associated with this subpicture */
+    unsigned char *surfaces; /* surfaces, associated with this subpicture */
 };
 
 #define MEMSET_OBJECT(ptr, data_struct) \
-        memset((void *)ptr + sizeof(struct object_base_s),\
+        memset((unsigned char *)ptr + sizeof(struct object_base_s),\
                 0,                          \
                sizeof(data_struct) - sizeof(struct object_base_s))
 
@@ -462,6 +493,41 @@ inline static char * buffer_type_to_string(int type)
         return "UnknowBuffer";
     }
 }
+
+inline static int Angle2Rotation(int angle)
+{
+    angle %= 360;
+    switch (angle) {
+    case 0:
+        return VA_ROTATION_NONE;
+    case 90:
+        return VA_ROTATION_90;
+    case 180:
+        return VA_ROTATION_180;
+    case 270:
+        return VA_ROTATION_270;
+    default:
+        return -1;
+    }
+}
+
+inline static int Rotation2Angle(int rotation)
+{
+    switch (rotation) {
+    case VA_ROTATION_NONE:
+        return 0;
+    case VA_ROTATION_90:
+        return 90;
+    case VA_ROTATION_180:
+        return 180;
+    case VA_ROTATION_270:
+        return 270;
+    default:
+        return -1;
+    }
+}
+
+int psb_parse_config(char *env, char *env_value);
 
 int LOCK_HARDWARE(psb_driver_data_p driver_data);
 int UNLOCK_HARDWARE(psb_driver_data_p driver_data);

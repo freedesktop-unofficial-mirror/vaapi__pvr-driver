@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -74,10 +74,21 @@ static void pnw_jpeg_QueryConfigAttributes(
 static VAStatus pnw_jpeg_ValidateConfig(
     object_config_p obj_config)
 {
-    VAStatus vaStatus = VA_STATUS_SUCCESS;
-    psb__information_message("pnw_jpeg_ValidateConfig\n");
+    int i;
+    /* Check all attributes */
+    for (i = 0; i < obj_config->attrib_count; i++) {
+        switch (obj_config->attrib_list[i].type) {
+        case VAConfigAttribRTFormat:
+            /* Ignore */
+            break;
+        case VAConfigAttribRateControl:
+            break;
+        default:
+            return VA_STATUS_ERROR_ATTR_NOT_SUPPORTED;
+        }
+    }
 
-    return vaStatus;
+    return VA_STATUS_SUCCESS;
 
 }
 
@@ -157,7 +168,7 @@ static VAStatus pnw_jpeg_CreateContext(
     /*It will be figured out when known the size of whole coded buffer.*/
     jpeg_ctx_p->ui32SizePerCodedBuffer = 0;
 
-    jpeg_ctx_p->ctx = ctx;
+    jpeg_ctx_p->ctx = (unsigned char *)ctx;
     /*Reuse header_mem(76*4 bytes) and pic_params_size(256 bytes)
      *  as pMemInfoMTXSetup(JPEG_MTX_DMA_SETUP 24x4 bytes) and
      *  pMemInfoTableBlock JPEG_MTX_QUANT_TABLE(128byes)*/
@@ -309,7 +320,7 @@ static VAStatus pnw__jpeg_process_picture_param(context_ENC_p ctx, object_buffer
                              "coded segment size per scan is %d\n",
                              ctx->coded_buf->size, jpeg_ctx->ui32SizePerCodedBuffer);
 
-    vaStatus = psb_buffer_map(ctx->coded_buf->psb_buffer, &jpeg_ctx->jpeg_coded_buf.pMemInfo);
+    vaStatus = psb_buffer_map(ctx->coded_buf->psb_buffer, (unsigned char **)&jpeg_ctx->jpeg_coded_buf.pMemInfo);
     if (vaStatus) {
         psb__error_message("ERROR: Map coded_buf failed!");
         return vaStatus;
@@ -464,6 +475,12 @@ static VAStatus pnw_jpeg_EndPicture(
 
         ui32RemainMCUs -= ui32NoMCUsToEncode;
     }
+    pnw_cmdbuf_insert_command_package(ctx->obj_context,
+                                      1 ,
+                                      MTX_CMDID_NULL,
+                                      NULL,
+                                      0);
+
 
     psb_buffer_unmap(&cmdbuf->pic_params);
     cmdbuf->pic_params_p = NULL;
@@ -482,14 +499,14 @@ static VAStatus pnw_jpeg_EndPicture(
     return VA_STATUS_SUCCESS;
 }
 
-VAStatus pnw_jpeg_AppendMarkers(object_context_p obj_context, void *raw_coded_buf)
+VAStatus pnw_jpeg_AppendMarkers(object_context_p obj_context, unsigned char *raw_coded_buf)
 {
     INIT_CONTEXT_JPEG;
     IMG_UINT16 ui16BCnt;
     TOPAZSC_JPEG_ENCODER_CONTEXT *pContext = ctx->jpeg_ctx;
     BUFFER_HEADER* pBufHeader;
     STREAMTYPEW s_streamW;
-    void *pSegStart = raw_coded_buf;
+    unsigned char *pSegStart = raw_coded_buf;
 
     if (pSegStart == NULL) {
         return VA_STATUS_ERROR_UNKNOWN;

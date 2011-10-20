@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -54,6 +54,8 @@
 #define SET_SURFACE_INFO_dpb_idx(psb_surface, val) psb_surface->extra_info[2] = val;
 #define GET_SURFACE_INFO_colocated_index(psb_surface) ((int) (psb_surface->extra_info[3]))
 #define SET_SURFACE_INFO_colocated_index(psb_surface, val) psb_surface->extra_info[3] = (uint32_t) val;
+#define SET_SURFACE_INFO_rotate(psb_surface, rotate) psb_surface->extra_info[5] = (uint32_t) rotate;
+#define GET_SURFACE_INFO_rotate(psb_surface) ((int) psb_surface->extra_info[5])
 
 #define IS_USED_AS_REFERENCE(pic_flags)         ( pic_flags & (VA_PICTURE_H264_SHORT_TERM_REFERENCE | VA_PICTURE_H264_LONG_TERM_REFERENCE) )
 
@@ -468,7 +470,7 @@ static VAStatus psb_H264_CreateContext(
         DEBUG_FAILURE;
     }
     if (vaStatus == VA_STATUS_SUCCESS) {
-        void *vlc_packed_data_address;
+        unsigned char *vlc_packed_data_address;
         if (0 ==  psb_buffer_map(&ctx->vlc_packed_table, &vlc_packed_data_address)) {
             memcpy(vlc_packed_data_address, ui16H264VLCTableData, sizeof(ui16H264VLCTableData));
             psb_buffer_unmap(&ctx->vlc_packed_table);
@@ -555,8 +557,6 @@ static VAStatus psb__H264_allocate_colocated_buffer(context_H264_p ctx, object_s
 {
     psb_surface_p surface = obj_surface->psb_surface;
 
-    psb__information_message("psb_H264: Allocating colocated buffer for surface %08x size = %08x\n", surface, size);
-
     if (!GET_SURFACE_INFO_colocated_index(surface)) {
         VAStatus vaStatus;
         psb_buffer_p buf;
@@ -564,6 +564,8 @@ static VAStatus psb__H264_allocate_colocated_buffer(context_H264_p ctx, object_s
         if (index >= ctx->colocated_buffers_size) {
             return VA_STATUS_ERROR_UNKNOWN;
         }
+        psb__information_message("psb_H264: Allocating colocated buffer for surface %08x size = %08x\n", surface, size);
+
         buf = &(ctx->colocated_buffers[index]);
         vaStatus = psb_buffer_create(ctx->obj_context->driver_data, size, psb_bt_vpu_only, buf);
         if (VA_STATUS_SUCCESS != vaStatus) {
@@ -577,11 +579,12 @@ static VAStatus psb__H264_allocate_colocated_buffer(context_H264_p ctx, object_s
 
 static psb_buffer_p psb__H264_lookup_colocated_buffer(context_H264_p ctx, psb_surface_p surface)
 {
-    psb__information_message("psb_H264: Looking up colocated buffer for surface %08x\n", surface);
+    /* psb__information_message("psb_H264: Looking up colocated buffer for surface %08x\n", surface); */
     int index = GET_SURFACE_INFO_colocated_index(surface);
     if (!index) {
         return NULL;
     }
+
     return &(ctx->colocated_buffers[index-1]); /* 0 means unset, index is offset by 1 */
 }
 
@@ -621,7 +624,9 @@ static VAStatus psb__H264_process_picture_param(context_H264_p ctx, object_buffe
 
     if ((obj_buffer->num_elements != 1) ||
         (obj_buffer->size != sizeof(VAPictureParameterBufferH264)) ||
-        (NULL == target_surface)) {
+        (NULL == target_surface) ||
+        (NULL == obj_buffer->buffer_data)) {
+        psb__error_message("picture parameter buffer is not valid.\n");
         return VA_STATUS_ERROR_UNKNOWN;
     }
 
@@ -662,7 +667,10 @@ static VAStatus psb__H264_process_picture_param(context_H264_p ctx, object_buffe
     ctx->size_mb = ctx->picture_width_mb * ctx->picture_height_mb;              /* (7-25) */
 
     //uint32_t colocated_size = (ctx->picture_width_mb + extra_size) * (ctx->picture_height_mb + extra_size) * 192;
-    uint32_t colocated_size = ((ctx->size_mb + 100) * 128 + 0xfff) & ~0xfff;
+    /*for resolution change feature, need allocat co-located buffer according the size of surface*/
+    uint32_t size_mb = ((ctx->obj_context->current_render_target->width + 15) / 16) *
+                       ((ctx->obj_context->current_render_target->height + 15) / 16);
+    uint32_t colocated_size = ((size_mb + 100) * 128 + 0xfff) & ~0xfff;
 
     vaStatus = psb__H264_allocate_colocated_buffer(ctx, ctx->obj_context->current_render_target, colocated_size);
     if (VA_STATUS_SUCCESS != vaStatus) {
@@ -777,7 +785,9 @@ static VAStatus psb__H264_process_iq_matrix(context_H264_p ctx, object_buffer_p 
     ASSERT(obj_buffer->size == sizeof(VAIQMatrixBufferH264));
 
     if ((obj_buffer->num_elements != 1) ||
-        (obj_buffer->size != sizeof(VAIQMatrixBufferH264))) {
+        (obj_buffer->size != sizeof(VAIQMatrixBufferH264)) ||
+        (NULL == obj_buffer->buffer_data)) {
+        psb__error_message("iq matrix buffer is not valid.\n");
         return VA_STATUS_ERROR_UNKNOWN;
     }
 
@@ -798,7 +808,8 @@ static VAStatus psb__H264_process_slice_group_map(context_H264_p ctx, object_buf
     ASSERT(obj_buffer->num_elements == 1);
 //    ASSERT(obj_buffer->size == ...);
 
-    if (obj_buffer->num_elements != 1) {
+    if ((obj_buffer->num_elements != 1) ||
+        (NULL == obj_buffer->psb_buffer)) {
         return VA_STATUS_ERROR_UNKNOWN;
     }
 
@@ -1040,7 +1051,7 @@ static void psb__H264_setup_alternative_frame(context_H264_p ctx)
     psb_surface_p rotate_surface = ctx->obj_context->current_render_target->psb_surface_rotate;
     object_context_p obj_context = ctx->obj_context;
 
-    if (rotate_surface->extra_info[5] != obj_context->rotate)
+    if (GET_SURFACE_INFO_rotate(rotate_surface) != obj_context->msvdx_rotate)
         psb__error_message("Display rotate mode does not match surface rotate mode!\n");
 
 
@@ -1058,7 +1069,7 @@ static void psb__H264_setup_alternative_frame(context_H264_p ctx)
     REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ALT_PICTURE_ENABLE, 1);
     REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ROTATION_ROW_STRIDE, rotate_surface->stride_mode);
     REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , RECON_WRITE_DISABLE, 0); /* FIXME Always generate Rec */
-    REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ROTATION_MODE, rotate_surface->extra_info[5]);
+    REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ROTATION_MODE, GET_SURFACE_INFO_rotate(rotate_surface));
 
     psb_cmdbuf_rendec_write(cmdbuf, cmd);
 
@@ -1072,7 +1083,7 @@ static void psb__H264_build_rendec_params(context_H264_p ctx, VASliceParameterBu
     psb_surface_p target_surface = ctx->obj_context->current_render_target->psb_surface;
     VAPictureParameterBufferH264 *pic_params = ctx->pic_params;
     uint32_t reg_value;
-    int i;
+    unsigned int i;
 
     psb_cmdbuf_rendec_start_block(cmdbuf);
 
@@ -1115,7 +1126,7 @@ static void psb__H264_build_rendec_params(context_H264_p ctx, VASliceParameterBu
 
     psb_cmdbuf_rendec_end_chunk(cmdbuf);
 
-#warning "TODO: MUST be done after fe slice1 (which gives MB address) "
+    //#warning "TODO: MUST be done after fe slice1 (which gives MB address) "
     /*          REGIO_WRITE_REGISTER(0, MSVDX_VEC_H264, CR_VEC_H264_FE_BASE_ADDR_SGM, gui32SliceGroupType6BaseAddressHack); */
 
     /* CHUNK: SCA */
@@ -1142,8 +1153,8 @@ static void psb__H264_build_rendec_params(context_H264_p ctx, VASliceParameterBu
     if (slice_param->slice_type == ST_B ||  slice_param->slice_type == ST_P) {
         psb_cmdbuf_rendec_start_chunk(cmdbuf, RENDEC_REGISTER_OFFSET(MSVDX_VEC, H264_CR_VEC_H264_BE_LIST0));
 
-        if (slice_param->num_ref_idx_l0_active_minus1 > (32 - 4)) {
-            psb__error_message("num_ref_idx_l0_active_minus1(%d) is too big. Set it with 28\n",
+        if (slice_param->num_ref_idx_l0_active_minus1 > 31) {
+            psb__error_message("num_ref_idx_l0_active_minus1(%d) is too big, limit it to 31.\n",
                                slice_param->num_ref_idx_l0_active_minus1);
             slice_param->num_ref_idx_l0_active_minus1 = 28;
         }
@@ -1164,7 +1175,6 @@ static void psb__H264_build_rendec_params(context_H264_p ctx, VASliceParameterBu
     /* send DPB information (for P and B slices?) only needed once per frame */
 //      if ( sh->slice_type == ST_B || sh->slice_type == ST_P )
     if (pic_params->num_ref_frames > 0) {
-        int i;
         IMG_BOOL is_used[16];
         psb_cmdbuf_rendec_start_chunk(cmdbuf, RENDEC_REGISTER_OFFSET(MSVDX_CMDS, REFERENCE_PICTURE_BASE_ADDRESSES));
 
@@ -1210,7 +1220,7 @@ static void psb__H264_build_rendec_params(context_H264_p ctx, VASliceParameterBu
                                          __FUNCTION__, __LINE__);
                 /* return; */
             }
-
+            /*
             psb__information_message("pic_params->ReferenceFrames[%d] = %08x --> %08x frame_idx:0x%08x flags:%02x TopFieldOrderCnt: 0x%08x BottomFieldOrderCnt: 0x%08x %s\n",
                                      i,
                                      pic_params->ReferenceFrames[i].picture_id,
@@ -1220,8 +1230,8 @@ static void psb__H264_build_rendec_params(context_H264_p ctx, VASliceParameterBu
                                      pic_params->ReferenceFrames[i].TopFieldOrderCnt,
                                      pic_params->ReferenceFrames[i].BottomFieldOrderCnt,
                                      is_used[i] ? "used" : "");
-
-            if (ref_surface && is_used[i])
+            */
+            if (ref_surface && is_used[i] && ref_surface->psb_surface->ref_buf)
                 // GET_SURFACE_INFO_is_used(ref_surface->psb_surface))
             {
                 buffer = ref_surface->psb_surface->ref_buf;
@@ -1322,7 +1332,7 @@ static void psb__H264_build_rendec_params(context_H264_p ctx, VASliceParameterBu
     /*          If this a two pass mode deblock, then we will perform the rotation as part of the
      *          2nd pass deblock procedure
      */
-    if (/*!ctx->two_pass_mode &&*/ ctx->obj_context->rotate != VA_ROTATION_NONE) /* FIXME field coded should not issue */
+    if (/*!ctx->two_pass_mode &&*/ CONTEXT_ROTATE(ctx->obj_context)) /* FIXME field coded should not issue */
         psb__H264_setup_alternative_frame(ctx);
 
     /* CHUNK: SEQ Commands 1 */
@@ -1422,7 +1432,7 @@ static VAStatus psb__H264_add_slice_param(context_H264_p ctx, object_buffer_p ob
 {
     ASSERT(obj_buffer->type == VASliceParameterBufferType);
     if (ctx->slice_param_list_idx >= ctx->slice_param_list_size) {
-        void *new_list;
+        unsigned char *new_list;
         ctx->slice_param_list_size += 8;
         new_list = realloc(ctx->slice_param_list,
                            sizeof(object_buffer_p) * ctx->slice_param_list_size);
@@ -1539,7 +1549,7 @@ static const  IMG_UINT32 ui32H264VLCTableRegValPair[] = {
 static void psb__H264_write_VLC_tables(context_H264_p ctx)
 {
     psb_cmdbuf_p cmdbuf = ctx->obj_context->cmdbuf;
-    int i;
+    unsigned int i;
 
     psb_cmdbuf_skip_start_block(cmdbuf, SKIP_ON_CONTEXT_SWITCH);
 
@@ -1589,6 +1599,7 @@ static VAStatus psb__H264_process_slice(context_H264_p ctx,
 
     ASSERT((obj_buffer->type == VASliceDataBufferType) || (obj_buffer->type == VAProtectedSliceDataBufferType));
 
+#if 0
     psb__information_message("H264 process slice %d\n", ctx->slice_count);
     psb__information_message("    profile = %s\n", profile2str[ctx->profile]);
     psb__information_message("    size = %08x offset = %08x\n", slice_param->slice_data_size, slice_param->slice_data_offset);
@@ -1597,6 +1608,7 @@ static VAStatus psb__H264_process_slice(context_H264_p ctx,
     psb__information_message("    coded size = %dx%d\n", ctx->picture_width_mb, ctx->picture_height_mb);
     psb__information_message("    slice type = %s\n", slice2str[(slice_param->slice_type % 5)]);
     psb__information_message("    weighted_pred_flag = %d weighted_bipred_idc = %d\n", ctx->pic_params->pic_fields.bits.weighted_pred_flag, ctx->pic_params->pic_fields.bits.weighted_bipred_idc);
+#endif
 
     if ((slice_param->slice_data_flag == VA_SLICE_DATA_FLAG_BEGIN) ||
         (slice_param->slice_data_flag == VA_SLICE_DATA_FLAG_ALL)) {
@@ -1695,25 +1707,35 @@ static VAStatus psb__H264_process_slice_data(context_H264_p ctx, object_buffer_p
     VAStatus vaStatus = VA_STATUS_SUCCESS;
     VASliceParameterBufferH264 *slice_param;
     int buffer_idx = 0;
-    int element_idx = 0;
+    unsigned int element_idx = 0;
 
     ASSERT((obj_buffer->type == VASliceDataBufferType) || (obj_buffer->type == VAProtectedSliceDataBufferType));
 
     ASSERT(ctx->pic_params);
     ASSERT(ctx->slice_param_list_idx);
 
-    if (!ctx->pic_params) {
+    if ((!ctx->pic_params) || (!ctx->slice_param_list_idx)) {
         /* Picture params missing */
+        psb__error_message("picture/slice parameter buffer should not be empty.\n");
         return VA_STATUS_ERROR_UNKNOWN;
     }
     if ((NULL == obj_buffer->psb_buffer) ||
         (0 == obj_buffer->size)) {
         /* We need to have data in the bitstream buffer */
+        psb__error_message("bitstream buffer should not be empty.\n");
         return VA_STATUS_ERROR_UNKNOWN;
     }
 
     while (buffer_idx < ctx->slice_param_list_idx) {
         object_buffer_p slice_buf = ctx->slice_param_list[buffer_idx];
+        /*need check whether slice parameter buffer is valid*/
+        if ((NULL == slice_buf) ||
+            (NULL == slice_buf->buffer_data) ||
+            (slice_buf->size != sizeof(VASliceParameterBufferH264))) {
+            psb__error_message("slice parameter buffer is not valid.\n");
+            return VA_STATUS_ERROR_UNKNOWN;
+        }
+
         if (element_idx >= slice_buf->num_elements) {
             /* Move to next buffer */
             element_idx = 0;
@@ -1767,32 +1789,32 @@ static VAStatus psb_H264_RenderPicture(
 
         switch (obj_buffer->type) {
         case VAPictureParameterBufferType:
-            psb__information_message("psb_H264_RenderPicture got VAPictureParameterBuffer\n");
+            /* psb__information_message("psb_H264_RenderPicture got VAPictureParameterBuffer\n"); */
             vaStatus = psb__H264_process_picture_param(ctx, obj_buffer);
             DEBUG_FAILURE;
             break;
 
         case VAIQMatrixBufferType:
-            psb__information_message("psb_H264_RenderPicture got VAIQMatrixBufferType\n");
+            /* psb__information_message("psb_H264_RenderPicture got VAIQMatrixBufferType\n"); */
             vaStatus = psb__H264_process_iq_matrix(ctx, obj_buffer);
             DEBUG_FAILURE;
             break;
 
         case VASliceGroupMapBufferType:
-            psb__information_message("psb_H264_RenderPicture got VASliceGroupMapBufferType\n");
+            /* psb__information_message("psb_H264_RenderPicture got VASliceGroupMapBufferType\n"); */
             vaStatus = psb__H264_process_slice_group_map(ctx, obj_buffer);
             DEBUG_FAILURE;
             break;
 
         case VASliceParameterBufferType:
-            psb__information_message("psb_H264_RenderPicture got VASliceParameterBufferType\n");
+            /* psb__information_message("psb_H264_RenderPicture got VASliceParameterBufferType\n"); */
             vaStatus = psb__H264_add_slice_param(ctx, obj_buffer);
             DEBUG_FAILURE;
             break;
 
         case VASliceDataBufferType:
         case VAProtectedSliceDataBufferType:
-            psb__information_message("psb_H264_RenderPicture got %s\n", SLICEDATA_BUFFER_TYPE(obj_buffer->type));
+            /* psb__information_message("psb_H264_RenderPicture got %s\n", SLICEDATA_BUFFER_TYPE(obj_buffer->type)); */
             vaStatus = psb__H264_process_slice_data(ctx, obj_buffer);
             DEBUG_FAILURE;
             break;
@@ -1855,8 +1877,8 @@ static VAStatus psb_H264_EndPicture(
     }
 #endif
 
-    if (ctx->two_pass_mode && (ctx->obj_context->rotate == VA_ROTATION_NONE)) {
-        void *pMbData = NULL;
+    if (ctx->two_pass_mode && (CONTEXT_ROTATE(ctx->obj_context) == 0)) {
+        unsigned char *pMbData = NULL;
 
         psb_surface_p target_surface = ctx->obj_context->current_render_target->psb_surface;
         psb_buffer_p colocated_target_buffer = psb__H264_lookup_colocated_buffer(ctx, target_surface);

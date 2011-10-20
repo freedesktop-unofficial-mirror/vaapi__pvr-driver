@@ -8,11 +8,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -168,10 +168,11 @@ int lnc_ospm_start(psb_driver_data_p driver_data, int encode)
 {
     int ret;
 
-    if (getenv("PSB_VIDEO_NO_OSPM"))
+    if (psb_parse_config("PSB_VIDEO_NOPM", NULL) == 0)
         return 0;
 
     if (IS_MRST(driver_data)) {
+        /*
         psb__information_message("OSPM:send DBUS message to ospm daemon\n");
         if (encode)
             ret = lnc_ospm_event_send("video_record", "start");
@@ -182,8 +183,10 @@ int lnc_ospm_start(psb_driver_data_p driver_data, int encode)
             psb__information_message("lnc_ospm_event_send start error: #%d\n", ret);
         else
             psb__information_message("lnc_ospm_event_send start ok\n");
+        */
     } else if (IS_MFLD(driver_data)) {
         psb__information_message("OSPM:set PM_QoS parameters\n");
+        return 0;
         /*
         if (encode)
             lnc_handle_pm_qos(driver_data);
@@ -208,6 +211,7 @@ int lnc_ospm_stop(psb_driver_data_p driver_data, int encode)
         return 0;
 
     if (IS_MRST(driver_data)) {
+        /*
         psb__information_message("OSPM:send DBUS message to ospm daemon\n");
         if (encode)
             ret = lnc_ospm_event_send("video_record", "stop");
@@ -218,12 +222,14 @@ int lnc_ospm_stop(psb_driver_data_p driver_data, int encode)
             psb__information_message("lnc_ospm_event_send start error: #%d\n", ret);
         else
             psb__information_message("lnc_ospm_event_send start ok\n");
+        */
     } else if (IS_MFLD(driver_data)) {
         psb__information_message("OSPM:set PM_QoS parameters\n");
         /*
         if (encode)
             lnc_handle_pm_qos(driver_data);
         */
+        return 0;
     }
 
     if (encode) {

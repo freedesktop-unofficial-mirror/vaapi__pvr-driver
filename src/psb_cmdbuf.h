@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -54,13 +54,13 @@ struct psb_cmdbuf_s {
 
     struct psb_buffer_s regio_buf;
     unsigned int regio_size;
-    void * regio_base;
+    unsigned char * regio_base;
     uint32_t *regio_idx;
 
     /* MTX msg */
-    void *MTX_msg;
+    unsigned char *MTX_msg;
     /* Relocation records */
-    void *reloc_base;
+    unsigned char *reloc_base;
     struct drm_psb_reloc *reloc_idx;
 
     /* CMD stream data */
@@ -69,14 +69,14 @@ struct psb_cmdbuf_s {
     int oold_count;
     int host_be_opp_count;
     int frame_info_count;
-    void *cmd_base;
-    void *cmd_start;
+    unsigned char *cmd_base;
+    unsigned char *cmd_start;
     uint32_t *cmd_idx;
     uint32_t *cmd_bitstream_size; /* Pointer to bitstream size field in last SR_SETUP */
     /* LLDMA records */
-    void *lldma_base;
-    void *lldma_idx;
-    void *lldma_last; /* Pointer to last LLDMA record */
+    unsigned char *lldma_base;
+    unsigned char *lldma_idx;
+    unsigned char *lldma_last; /* Pointer to last LLDMA record */
 
     /* Referenced buffers */
     psb_buffer_p *buffer_refs;
@@ -338,7 +338,7 @@ void psb_cmdbuf_rendec_end(psb_cmdbuf_p cmdbuf);
  */
 int psb_cmdbuf_second_pass(object_context_p obj_context,
                            uint32_t OperatingModeCmd,
-                           void * pvParamBase,
+                           unsigned char * pvParamBase,
                            uint32_t PicWidthInMbs,
                            uint32_t FrameHeightInMbs,
                            psb_buffer_p target_buffer,

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -32,6 +32,7 @@
 #include "psb_def.h"
 #include "psb_surface.h"
 #include "psb_cmdbuf.h"
+#include "pnw_rotate.h"
 
 #include "vc1_header.h"
 #include "vc1_defs.h"
@@ -58,6 +59,8 @@ static int VC1_Header_Parser_HW = 1;
 #define SET_SURFACE_INFO_picture_coding_type(psb_surface, val) psb_surface->extra_info[2] = (uint32_t) val;
 #define GET_SURFACE_INFO_colocated_index(psb_surface) ((int) (psb_surface->extra_info[3]))
 #define SET_SURFACE_INFO_colocated_index(psb_surface, val) psb_surface->extra_info[3] = (uint32_t) val;
+#define SET_SURFACE_INFO_rotate(psb_surface, rotate) psb_surface->extra_info[5] = (uint32_t) rotate;
+#define GET_SURFACE_INFO_rotate(psb_surface) ((int) psb_surface->extra_info[5])
 
 #define SLICEDATA_BUFFER_TYPE(type) ((type==VASliceDataBufferType)?"VASliceDataBufferType":"VAProtectedSliceDataBufferType")
 
@@ -489,7 +492,7 @@ static VAStatus pnw_VC1_CreateContext(
     }
 
     if (vaStatus == VA_STATUS_SUCCESS) {
-        void *preload;
+        unsigned char *preload;
         if (0 ==  psb_buffer_map(&ctx->preload_buffer, &preload)) {
             memset(preload, 0, PRELOAD_BUFFER_SIZE);
             psb_buffer_unmap(&ctx->preload_buffer);
@@ -532,8 +535,8 @@ static VAStatus pnw_VC1_CreateContext(
         DEBUG_FAILURE;
     }
     if (vaStatus == VA_STATUS_SUCCESS) {
-        void *vlc_packed_data_address;
-        if (0 ==  psb_buffer_map(&ctx->vlc_packed_table, &vlc_packed_data_address)) {
+        uint16_t *vlc_packed_data_address;
+        if (0 ==  psb_buffer_map(&ctx->vlc_packed_table, (unsigned char **)&vlc_packed_data_address)) {
             psb__VC1_pack_vlc_tables(vlc_packed_data_address, gaui16vc1VlcTableData, gui16vc1VlcTableSize);
             psb_buffer_unmap(&ctx->vlc_packed_table);
             psb__VC1_pack_index_table_info(ctx->vlc_packed_index_table, gaui16vc1VlcIndexData);
@@ -792,6 +795,12 @@ static VAStatus psb__VC1_process_picture_param(context_VC1_p ctx, object_buffer_
             return vaStatus;
         }
     }
+
+    //SET_SURFACE_INFO_picture_coding_type(ctx->decoded_surface->psb_surface, pic_params->picture_fields.bits.frame_coding_mode);
+    SET_SURFACE_INFO_picture_coding_type(ctx->obj_context->current_render_target->psb_surface, pic_params->picture_fields.bits.frame_coding_mode);
+    ctx->forward_ref_fcm =  pic_params->picture_fields.bits.frame_coding_mode;
+    ctx->backward_ref_fcm =  pic_params->picture_fields.bits.frame_coding_mode;
+
     /* Lookup surfaces for backward/forward references */
     ctx->forward_ref_surface = NULL;
     ctx->backward_ref_surface = NULL;
@@ -801,6 +810,12 @@ static VAStatus psb__VC1_process_picture_param(context_VC1_p ctx, object_buffer_
     if (pic_params->backward_reference_picture != VA_INVALID_SURFACE) {
         ctx->backward_ref_surface = SURFACE(pic_params->backward_reference_picture);
     }
+
+    if (ctx->forward_ref_surface)
+        ctx->forward_ref_fcm = GET_SURFACE_INFO_picture_coding_type(ctx->forward_ref_surface->psb_surface);
+
+    if (ctx->backward_ref_surface)
+        ctx->backward_ref_fcm = GET_SURFACE_INFO_picture_coding_type(ctx->backward_ref_surface->psb_surface);
 
 #if 0
     if (NULL == ctx->forward_ref_surface) {
@@ -1300,6 +1315,8 @@ static VAStatus psb__VC1_process_picture_param(context_VC1_p ctx, object_buffer_
     }
     /************************************************************************************/
 
+    psb_CheckInterlaceRotate(ctx->obj_context, (void *)ctx->pic_params);
+
     return VA_STATUS_SUCCESS;
 }
 
@@ -1328,7 +1345,7 @@ static VAStatus psb__VC1_add_slice_param(context_VC1_p ctx, object_buffer_p obj_
 {
     ASSERT(obj_buffer->type == VASliceParameterBufferType);
     if (ctx->slice_param_list_idx >= ctx->slice_param_list_size) {
-        void *new_list;
+        unsigned char *new_list;
         ctx->slice_param_list_size += 8;
         new_list = realloc(ctx->slice_param_list,
                            sizeof(object_buffer_p) * ctx->slice_param_list_size);
@@ -1742,7 +1759,7 @@ static void psb__VC1_write_VLC_tables(context_VC1_p ctx)
 static void psb__VC1_build_VLC_tables(context_VC1_p ctx)
 {
     psb_cmdbuf_p cmdbuf = ctx->obj_context->cmdbuf;
-    int i;
+    unsigned int i;
     uint16_t RAM_location = 0;
     uint32_t reg_value;
 
@@ -1852,7 +1869,12 @@ static void psb__VC1_setup_alternative_frame(context_VC1_p ctx)
     psb_surface_p rotate_surface = ctx->obj_context->current_render_target->psb_surface_rotate;
     object_context_p obj_context = ctx->obj_context;
 
-    if (rotate_surface->extra_info[5] != obj_context->rotate)
+    if (rotate_surface == NULL) {
+        psb__information_message("rotate surface is NULL, abort msvdx rotation\n");
+        return;
+    }
+
+    if (GET_SURFACE_INFO_rotate(rotate_surface) != obj_context->msvdx_rotate)
         psb__error_message("Display rotate mode does not match surface rotate mode!\n");
 
 
@@ -1870,7 +1892,7 @@ static void psb__VC1_setup_alternative_frame(context_VC1_p ctx)
     REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ALT_PICTURE_ENABLE, 1);
     REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ROTATION_ROW_STRIDE, rotate_surface->stride_mode);
     REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , RECON_WRITE_DISABLE, 0); /* FIXME Always generate Rec */
-    REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ROTATION_MODE, rotate_surface->extra_info[5]);
+    REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ROTATION_MODE, GET_SURFACE_INFO_rotate(rotate_surface));
 
     psb_cmdbuf_rendec_write(cmdbuf, cmd);
 
@@ -1889,7 +1911,7 @@ static void psb__VC1_program_output_register(context_VC1_p ctx, IMG_BOOL first_t
     *ctx->p_range_mapping_base1 = 0;
     //rotate_surface = ctx->decoded_surface->psb_surface_rotate;
 
-    if ((first_two_pass == 0) && (obj_context->rotate != VA_ROTATION_NONE)) {
+    if ((first_two_pass == 0) && CONTEXT_ROTATE(obj_context)) {
         psb_cmdbuf_rendec_start(cmdbuf, RENDEC_REGISTER_OFFSET(MSVDX_CMDS, VC1_LUMA_RANGE_MAPPING_BASE_ADDRESS));
         psb_cmdbuf_rendec_write_address(cmdbuf, &rotate_surface->buf, rotate_surface->buf.buffer_ofs);
         psb_cmdbuf_rendec_write_address(cmdbuf, &rotate_surface->buf, rotate_surface->chroma_offset + rotate_surface->buf.buffer_ofs);
@@ -1900,7 +1922,7 @@ static void psb__VC1_program_output_register(context_VC1_p ctx, IMG_BOOL first_t
         REGIO_WRITE_FIELD_LITE(alt_output_flags, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ALT_PICTURE_ENABLE, 1);
         REGIO_WRITE_FIELD_LITE(alt_output_flags, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ROTATION_ROW_STRIDE, rotate_surface->stride_mode);
         REGIO_WRITE_FIELD_LITE(alt_output_flags, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , RECON_WRITE_DISABLE, 0); /* FIXME Always generate Rec */
-        REGIO_WRITE_FIELD_LITE(alt_output_flags, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ROTATION_MODE, rotate_surface->extra_info[5]);
+        REGIO_WRITE_FIELD_LITE(alt_output_flags, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ROTATION_MODE, GET_SURFACE_INFO_rotate(rotate_surface));
     }
 
     psb_cmdbuf_rendec_start(cmdbuf, RENDEC_REGISTER_OFFSET(MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION));
@@ -2027,7 +2049,7 @@ static void psb__VC1_send_rendec_params(context_VC1_p ctx, VASliceParameterBuffe
 
     /* psb_cmdbuf_rendec_start_block( cmdbuf ); */
 
-//    if(ctx->obj_context->rotate != VA_ROTATION_NONE) /* FIXME field coded should not issue */
+//    if(CONTEXT_ROTATE(ctx->obj_context)) /* FIXME field coded should not issue */
 //        psb__VC1_setup_alternative_frame(ctx);
 
     /* CHUNK: 1 - VC1SEQUENCE00 */
@@ -2098,7 +2120,7 @@ static void psb__VC1_send_rendec_params(context_VC1_p ctx, VASliceParameterBuffe
 
     psb__VC1_program_output_register(ctx, ctx->pic_params->picture_fields.bits.frame_coding_mode != VC1_FCM_P);
 
-    if (ctx->pic_params->picture_fields.bits.frame_coding_mode == VC1_FCM_P && ctx->obj_context->rotate != VA_ROTATION_NONE)
+    if (ctx->pic_params->picture_fields.bits.frame_coding_mode == VC1_FCM_P && CONTEXT_ROTATE(ctx->obj_context))
         //deblock_surface = ctx->decoded_surface->psb_surface_rotate;
         deblock_surface = ctx->obj_context->current_render_target->psb_surface_rotate;
 
@@ -2269,9 +2291,13 @@ static void psb__VC1_send_rendec_params(context_VC1_p ctx, VASliceParameterBuffe
 
     /* CR_VEC_VC1_BE_PPS2 */
     cmd = 0;
-    REGIO_WRITE_FIELD(cmd, MSVDX_VEC_VC1, CR_VEC_VC1_BE_PPS2, VC1_BE_FCM_REF2, ctx->ui8FCM_Ref2Pic);
-    REGIO_WRITE_FIELD(cmd, MSVDX_VEC_VC1, CR_VEC_VC1_BE_PPS2, VC1_BE_FCM_REF1, ctx->ui8FCM_Ref1Pic);
-    REGIO_WRITE_FIELD(cmd, MSVDX_VEC_VC1, CR_VEC_VC1_BE_PPS2, VC1_BE_FCM_REF0, ctx->ui8FCM_Ref0Pic);
+    //REGIO_WRITE_FIELD(cmd, MSVDX_VEC_VC1, CR_VEC_VC1_BE_PPS2, VC1_BE_FCM_REF2, ctx->ui8FCM_Ref2Pic);
+    //REGIO_WRITE_FIELD(cmd, MSVDX_VEC_VC1, CR_VEC_VC1_BE_PPS2, VC1_BE_FCM_REF1, ctx->ui8FCM_Ref1Pic);
+    //REGIO_WRITE_FIELD(cmd, MSVDX_VEC_VC1, CR_VEC_VC1_BE_PPS2, VC1_BE_FCM_REF0, ctx->ui8FCM_Ref0Pic);
+    REGIO_WRITE_FIELD(cmd, MSVDX_VEC_VC1, CR_VEC_VC1_BE_PPS2, VC1_BE_FCM_REF2, ctx->backward_ref_fcm);
+    REGIO_WRITE_FIELD(cmd, MSVDX_VEC_VC1, CR_VEC_VC1_BE_PPS2, VC1_BE_FCM_REF1, ctx->forward_ref_fcm);
+    //REGIO_WRITE_FIELD(cmd, MSVDX_VEC_VC1, CR_VEC_VC1_BE_PPS2, VC1_BE_FCM_REF0, GET_SURFACE_INFO_picture_coding_type(ctx->decoded_surface->psb_surface));
+    REGIO_WRITE_FIELD(cmd, MSVDX_VEC_VC1, CR_VEC_VC1_BE_PPS2, VC1_BE_FCM_REF0, GET_SURFACE_INFO_picture_coding_type(ctx->obj_context->current_render_target->psb_surface));
     REGIO_WRITE_FIELD(cmd, MSVDX_VEC_VC1, CR_VEC_VC1_BE_PPS2, VC1_BE_COLLOCATED_SKIPPED, 0); // @TODO: Really need this?
     psb_cmdbuf_rendec_write(cmdbuf, cmd);
 
@@ -2648,7 +2674,7 @@ static void psb__VC1_Send_Parse_Header_Cmd(context_VC1_p ctx, IMG_BOOL new_pic)
     psb_cmdbuf_p cmdbuf = ctx->obj_context->cmdbuf;
 
     //pParseHeaderCMD                                  = (PARSE_HEADER_CMD*)mCtrlAlloc.AllocateSpace(sizeof(PARSE_HEADER_CMD));
-    pParseHeaderCMD = (void *)cmdbuf->cmd_idx;
+    pParseHeaderCMD = (PARSE_HEADER_CMD*)cmdbuf->cmd_idx;
     cmdbuf->cmd_idx += sizeof(PARSE_HEADER_CMD) / sizeof(uint32_t);
 
     pParseHeaderCMD->ui32Cmd                 = CMD_PARSE_HEADER;
@@ -2767,8 +2793,6 @@ static void psb__VC1_Send_Parse_Header_Cmd(context_VC1_p ctx, IMG_BOOL new_pic)
     pParseHeaderCMD->ui32ICParamData[0] = 0x00010000;
     pParseHeaderCMD->ui32ICParamData[1] = 0x00010020;
     PARSE_HEADER_CMD tmp = *pParseHeaderCMD;
-    tmp;
-
 }
 
 static VAStatus psb__VC1_process_slice(context_VC1_p ctx,
@@ -2879,7 +2903,7 @@ static VAStatus psb__VC1_process_slice_data(context_VC1_p ctx, object_buffer_p o
     VAStatus vaStatus = VA_STATUS_SUCCESS;
     VASliceParameterBufferVC1 *slice_param;
     int buffer_idx = 0;
-    int element_idx = 0;
+    unsigned int element_idx = 0;
 
     ASSERT((obj_buffer->type == VASliceDataBufferType) || (obj_buffer->type == VAProtectedSliceDataBufferType));
 

@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -21,30 +20,27 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ *
+ * Authors:
+ *    Zeng Li <zeng.li@intel.com>
+ *    Jason Hu <jason.hu@intel.com>
+ *    Shengquan Yuan  <shengquan.yuan@intel.com>
  */
 
+void psb_InitRotate(VADriverContextP ctx);
+void psb_RecalcRotate(VADriverContextP ctx);
+void psb_CheckInterlaceRotate(object_context_p obj_context, unsigned char *pic_param_tmp);
+VAStatus psb_DestroyRotateSurface(
+    VADriverContextP ctx,
+    object_surface_p obj_surface,
+    int rotate
+);
+VAStatus psb_CreateRotateSurface(
+    VADriverContextP ctx,
+    object_surface_p obj_surface,
+    int msvdx_rotate
+);
 
-#ifndef _LLDMA_DEFS_H_
-#define _LLDMA_DEFS_H_
 
-typedef enum {
-    LLDMA_TYPE_VLC_TABLE ,
-    LLDMA_TYPE_BITSTREAM ,
-    LLDMA_TYPE_RESIDUAL ,
-    LLDMA_TYPE_RENDER_BUFF_MC,
-    LLDMA_TYPE_RENDER_BUFF_VLD,
 
-    LLDMA_TYPE_MPEG4_FESTATE_SAVE,
-    LLDMA_TYPE_MPEG4_FESTATE_RESTORE,
 
-    LLDMA_TYPE_H264_PRELOAD_SAVE,
-    LLDMA_TYPE_H264_PRELOAD_RESTORE,
-
-    LLDMA_TYPE_VC1_PRELOAD_SAVE,
-    LLDMA_TYPE_VC1_PRELOAD_RESTORE,
-
-    LLDMA_TYPE_MEM_SET,
-
-} LLDMA_TYPE;
-
-#endif /* _LLDMA_DEFS_H_ */

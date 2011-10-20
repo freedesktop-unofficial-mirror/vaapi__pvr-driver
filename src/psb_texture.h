@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -42,6 +42,7 @@
 #define DRI2_BLIT_BUFFERS_NUM           2
 #define DRI2_MAX_BUFFERS_NUM            MAX( DRI2_FLIP_BUFFERS_NUM, DRI2_BLIT_BUFFERS_NUM )
 #define VIDEO_BUFFER_NUM                20
+
 
 typedef struct _psb_coeffs_ {
     signed char rY;
@@ -81,8 +82,6 @@ typedef struct _PVRDRI2BackBuffersExport_ {
 } PVRDRI2BackBuffersExport;
 
 struct psb_texture_s {
-    void *hPVR2DContext;
-
     struct _WsbmBufferObject *vaSrf;
 
     unsigned int video_transfermatrix;
@@ -102,17 +101,16 @@ struct psb_texture_s {
     sgx_psb_fixed32 hue;
 
     psb_coeffs_s coeffs;
-    PVR2DMEMINFO *pal_meminfo[6];
-    uint32_t wrapped_surface_id[VIDEO_BUFFER_NUM];
-    uint32_t wrapped_subpic_id[VIDEO_BUFFER_NUM];
-    PVR2DMEMINFO *videoBuf[VIDEO_BUFFER_NUM];
-    PVR2DMEMINFO *subpicBuf[VIDEO_BUFFER_NUM];
-#ifndef ANDROID
+
     uint32_t update_coeffs;
     PVRDRI2BackBuffersExport dri2_bb_export;
     PVRDRI2BackBuffersExport extend_dri2_bb_export;
-    struct dri_drawable *extend_dri_drawable;
-    struct dri_drawable *dri_drawable;
+
+    /* struct dri_drawable *extend_dri_drawable; */
+    /* struct dri_drawable *dri_drawable; */
+    unsigned char *extend_dri_drawable;
+    unsigned char *dri_drawable;
+
     uint32_t dri_init_flag;
     uint32_t extend_dri_init_flag;
     uint32_t adjust_window_flag;
@@ -125,14 +123,14 @@ struct psb_texture_s {
     uint32_t local_rotation_save;
     uint32_t extend_rotation_save;
 
+    PVR2DMEMINFO *pal_meminfo[6];
     PVR2DMEMINFO *blt_meminfo_pixmap;
     PVR2DMEMINFO *blt_meminfo[DRI2_BLIT_BUFFERS_NUM];
     PVR2DMEMINFO *flip_meminfo[DRI2_FLIP_BUFFERS_NUM];
     PVR2DMEMINFO *extend_blt_meminfo[DRI2_BLIT_BUFFERS_NUM];
-#endif
 };
 
-void psb_ctexture_init(VADriverContextP ctx);
+int psb_ctexture_init(VADriverContextP ctx);
 
 void psb_ctexture_deinit(VADriverContextP ctx);
 
@@ -140,20 +138,12 @@ void blit_texture_to_buf(VADriverContextP ctx, unsigned char * data, int src_x, 
                          int src_h, int dst_x, int dst_y, int dst_w, int dst_h,
                          int width, int height, int src_pitch, struct _WsbmBufferObject * src_buf,
                          unsigned int placement);
-#ifndef ANDROID
+
 void psb_putsurface_textureblit(
-    VADriverContextP ctx, PPVR2DMEMINFO pDstMeminfo, VASurfaceID surface, int src_x, int src_y, int src_w,
+    VADriverContextP ctx, unsigned char *dst, VASurfaceID surface, int src_x, int src_y, int src_w,
     int src_h, int dst_x, int dst_y, int dst_w, int dst_h, unsigned int subtitle,
     int width, int height,
     int src_pitch, struct _WsbmBufferObject * src_buf,
-    unsigned int placement);
-#else
-void psb_putsurface_textureblit(
-    VADriverContextP ctx, unsigned char * data, VASurfaceID surface, int src_x, int src_y, int src_w,
-    int src_h, int dst_x, int dst_y, int dst_w, int dst_h,
-    int width, int height,
-    int src_pitch, struct _WsbmBufferObject * src_buf,
-    unsigned int placement);
-#endif
+    unsigned int placement, int wrap_dst);
 
 #endif      /* !PSB_TEXTURE_H_ */

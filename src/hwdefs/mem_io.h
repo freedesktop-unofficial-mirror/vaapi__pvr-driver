@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -311,12 +311,12 @@ extern "C" {
 #define MEMIO_READ_TABLE_FIELD(vpMem, field, ui32TabIndex)                                                                                                                                                                                              \
         ( MEMIO_CHECK_ALIGNMENT(vpMem), IMG_ASSERT((ui32TabIndex < field##_NO_ENTRIES) || (field##_NO_ENTRIES == 0)),                                                                           \
         ((IMG_UINT32)(((*((field##_TYPE *)(((IMG_UINT32)vpMem) + field##_OFFSET + (field##_STRIDE * ui32TabIndex)))) & field##_MASK) >> field##_SHIFT)) )       \
- 
+
 #else
 
 #define MEMIO_READ_TABLE_FIELD(vpMem, field, ui32TabIndex)                                                                                                                                                                                              \
         ((IMG_UINT32)(((*((field##_TYPE *)(((IMG_UINT32)vpMem) + field##_OFFSET + (field##_STRIDE * ui32TabIndex)))) & field##_MASK) >> field##_SHIFT))         \
- 
+
 #endif
 
 
@@ -331,12 +331,12 @@ extern "C" {
 #define MEMIO_READ_REPEATED_FIELD(vpMem, field, ui32RepIndex)                                                                                                                                                                                                                                                           \
         ( MEMIO_CHECK_ALIGNMENT(vpMem), IMG_ASSERT(ui32RepIndex < field##_NO_REPS),                                                                                                                                                                                                                     \
         ((IMG_UINT32)(((*((field##_TYPE *)(((IMG_UINT32)vpMem) + field##_OFFSET))) & (field##_MASK >> (ui32RepIndex * field##_SIZE))) >> (field##_SHIFT - (ui32RepIndex * field##_SIZE)))) )    \
- 
+
 #else
 
 #define MEMIO_READ_REPEATED_FIELD(vpMem, field, ui32RepIndex)                                                                                                                                                                                                                                                           \
         ( (IMG_UINT32)(((*((field##_TYPE *)(((IMG_UINT32)vpMem) + field##_OFFSET))) & (field##_MASK >> (ui32RepIndex * field##_SIZE))) >> (field##_SHIFT - (ui32RepIndex * field##_SIZE))) )    \
- 
+
 #endif
     /*!
     ******************************************************************************
@@ -349,12 +349,12 @@ extern "C" {
 #define MEMIO_READ_TABLE_REPEATED_FIELD(vpMem, field, ui32TabIndex, ui32RepIndex)                                                                                                                                                                                                                                                                               \
     ( MEMIO_CHECK_ALIGNMENT(vpMem), IMG_ASSERT((ui32TabIndex < field##_NO_ENTRIES) || (field##_NO_ENTRIES == 0)), IMG_ASSERT(ui32RepIndex < field##_NO_REPS), \
     ((IMG_UINT32)(((*((field##_TYPE *)(((IMG_UINT32)vpMem) + field##_OFFSET + (field##_STRIDE * ui32TabIndex)))) & (field##_MASK >> (ui32RepIndex * field##_SIZE))) >> (field##_SHIFT - (ui32RepIndex * field##_SIZE)))) )      \
- 
+
 #else
 
 #define MEMIO_READ_TABLE_REPEATED_FIELD(vpMem, field, ui32TabIndex, ui32RepIndex)                                                                                                                                                                                                                                                                               \
     ((IMG_UINT32)(((*((field##_TYPE *)(((IMG_UINT32)vpMem) + field##_OFFSET + (field##_STRIDE * ui32TabIndex)))) & (field##_MASK >> (ui32RepIndex * field##_SIZE))) >> (field##_SHIFT - (ui32RepIndex * field##_SIZE))))        \
- 
+
 #endif
 
     /*!

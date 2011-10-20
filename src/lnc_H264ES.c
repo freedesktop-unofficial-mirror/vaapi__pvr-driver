@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -50,7 +50,7 @@
 #define SURFACE(id)    ((object_surface_p) object_heap_lookup( &ctx->obj_context->driver_data->surface_heap, id ))
 #define BUFFER(id)  ((object_buffer_p) object_heap_lookup( &ctx->obj_context->driver_data->buffer_heap, id ))
 
-int psb_parse_config(char *env, char *env_value);
+
 
 static void lnc_H264ES_QueryConfigAttributes(
     VAProfile profile,
@@ -87,11 +87,21 @@ static void lnc_H264ES_QueryConfigAttributes(
 static VAStatus lnc_H264ES_ValidateConfig(
     object_config_p obj_config)
 {
-    VAStatus vaStatus = VA_STATUS_SUCCESS;
-    psb__information_message("lnc_H264ES_ValidateConfig\n");
+    int i;
+    /* Check all attributes */
+    for (i = 0; i < obj_config->attrib_count; i++) {
+        switch (obj_config->attrib_list[i].type) {
+        case VAConfigAttribRTFormat:
+            /* Ignore */
+            break;
+        case VAConfigAttribRateControl:
+            break;
+        default:
+            return VA_STATUS_ERROR_ATTR_NOT_SUPPORTED;
+        }
+    }
 
-    return vaStatus;
-
+    return VA_STATUS_SUCCESS;
 }
 
 
@@ -291,7 +301,7 @@ static VAStatus lnc__H264ES_process_sequence_param(context_ENC_p ctx, object_buf
     if (ctx->eCodec == IMG_CODEC_H264_NO_RC)
         VUI_Params.CBR = 0;
 
-    lnc__H264_prepare_sequence_header(cmdbuf->header_mem_p + ctx->seq_header_ofs, pSequenceParams->max_num_ref_frames,
+    lnc__H264_prepare_sequence_header((IMG_UINT32 *)(cmdbuf->header_mem_p + ctx->seq_header_ofs), pSequenceParams->max_num_ref_frames,
                                       pSequenceParams->picture_width_in_mbs,
                                       pSequenceParams->picture_height_in_mbs,
                                       pSequenceParams->vui_flag,
@@ -310,8 +320,8 @@ static VAStatus lnc__H264ES_process_sequence_param(context_ENC_p ctx, object_buf
                 free(pSequenceParams);
                 return VA_STATUS_ERROR_ALLOCATION_FAILED;
             }
-            memcpy((void *)ctx->save_seq_header_p,
-                   (void *)(cmdbuf->header_mem_p + ctx->seq_header_ofs),
+            memcpy((unsigned char *)ctx->save_seq_header_p,
+                   (unsigned char *)(cmdbuf->header_mem_p + ctx->seq_header_ofs),
                    HEADER_SIZE);
         }
     }
@@ -382,15 +392,15 @@ static VAStatus lnc__H264ES_process_picture_param(context_ENC_p ctx, object_buff
         if (need_sps) {
             /* reuse the previous SPS */
             psb__information_message("TOPAZ: insert a SPS before IDR frame\n");
-            memcpy((void *)(cmdbuf->header_mem_p + ctx->seq_header_ofs),
-                   (void *)ctx->save_seq_header_p,
+            memcpy((unsigned char *)(cmdbuf->header_mem_p + ctx->seq_header_ofs),
+                   (unsigned char *)ctx->save_seq_header_p,
                    HEADER_SIZE);
 
             lnc_cmdbuf_insert_command(cmdbuf, MTX_CMDID_DO_HEADER, 2, 0); /* sequence header */
             RELOC_CMDBUF(cmdbuf->cmd_idx++, ctx->seq_header_ofs, &cmdbuf->header_mem);
         }
 
-        lnc__H264_prepare_picture_header(cmdbuf->header_mem_p + ctx->pic_header_ofs);
+        lnc__H264_prepare_picture_header((IMG_UINT32 *)(cmdbuf->header_mem_p + ctx->pic_header_ofs));
 
         lnc_cmdbuf_insert_command(cmdbuf, MTX_CMDID_DO_HEADER, 2, 1);/* picture header */
         RELOC_CMDBUF(cmdbuf->cmd_idx++, ctx->pic_header_ofs, &cmdbuf->header_mem);
@@ -428,13 +438,13 @@ static VAStatus lnc__H264ES_process_slice_param(context_ENC_p ctx, object_buffer
     lnc_cmdbuf_p cmdbuf = ctx->obj_context->lnc_cmdbuf;
     unsigned int MBSkipRun, FirstMBAddress;
     PIC_PARAMS *psPicParams = (PIC_PARAMS *)(cmdbuf->pic_params_p);
-    int i;
+    unsigned int i;
     int slice_param_idx;
 
     ASSERT(obj_buffer->type == VAEncSliceParameterBufferType);
 
     cmdbuf = ctx->obj_context->lnc_cmdbuf;
-    psPicParams = cmdbuf->pic_params_p;
+    psPicParams = (PIC_PARAMS *)cmdbuf->pic_params_p;
 
     /* Transfer ownership of VAEncPictureParameterBufferH264 data */
     pBuffer = (VAEncSliceParameterBuffer *) obj_buffer->buffer_data;
@@ -508,7 +518,7 @@ static VAStatus lnc__H264ES_process_slice_param(context_ENC_p ctx, object_buffer
 
         FirstMBAddress = (pBuffer->start_row_number * ctx->Width) / 16;
         /* Insert Do Header command, relocation is needed */
-        lnc__H264_prepare_slice_header(cmdbuf->header_mem_p + ctx->slice_header_ofs + ctx->obj_context->slice_count * HEADER_SIZE,
+        lnc__H264_prepare_slice_header((IMG_UINT32 *)(cmdbuf->header_mem_p + ctx->slice_header_ofs + ctx->obj_context->slice_count * HEADER_SIZE),
                                        pBuffer->slice_flags.bits.is_intra,
                                        pBuffer->slice_flags.bits.disable_deblocking_filter_idc,
                                        ctx->obj_context->frame_count,
@@ -621,7 +631,6 @@ static VAStatus lnc__H264ES_process_misc_param(context_ENC_p ctx, object_buffer_
             rate_control_param->min_qp = atoi(hardcoded_qp);
 
         if (rate_control_param->initial_qp > 65535 ||
-            rate_control_param->initial_qp < 3 ||
             rate_control_param->min_qp > 65535 ||
             rate_control_param->target_percentage > 65535) {
             vaStatus = VA_STATUS_ERROR_INVALID_PARAMETER;
@@ -682,8 +691,8 @@ static VAStatus lnc__H264ES_process_misc_param(context_ENC_p ctx, object_buffer_
             break;
         }
 
-	if (max_slice_size_param->max_slice_size != 0)
-		max_slice_size_param->max_slice_size -= WORST_CASE_SLICE_HEADER_SIZE;
+        if (max_slice_size_param->max_slice_size != 0)
+            max_slice_size_param->max_slice_size -= WORST_CASE_SLICE_HEADER_SIZE;
 
         if (ctx->max_slice_size == max_slice_size_param->max_slice_size)
             break;

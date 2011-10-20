@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -97,11 +97,11 @@ VAStatus psb_buffer_create(psb_driver_data_p driver_data,
         break;
     case psb_bt_camera:
         allignment = 1;
-        placement = DRM_PSB_FLAG_MEM_CI | WSBM_PL_FLAG_SHARED;
+        placement = TTM_PL_FLAG_CI | WSBM_PL_FLAG_SHARED;
         break;
     case psb_bt_rar:
         allignment = 1;
-        placement = DRM_PSB_FLAG_MEM_RAR | WSBM_PL_FLAG_SHARED;
+        placement = TTM_PL_FLAG_RAR | WSBM_PL_FLAG_SHARED;
         break;
     default:
         vaStatus = VA_STATUS_ERROR_UNKNOWN;
@@ -215,7 +215,45 @@ VAStatus psb_buffer_reference(psb_driver_data_p driver_data,
     return VA_STATUS_SUCCESS;
 }
 
+VAStatus psb_kbuffer_reference(psb_driver_data_p driver_data,
+                               psb_buffer_p buf,
+                               int kbuf_handle
+                              )
+{
+    int ret = 0;
+    VAStatus vaStatus = VA_STATUS_SUCCESS;
 
+    buf->drm_buf = NULL;
+
+    ret = LOCK_HARDWARE(driver_data);
+    if (ret) {
+        UNLOCK_HARDWARE(driver_data);
+        vaStatus = VA_STATUS_ERROR_ALLOCATION_FAILED;
+        DEBUG_FAILURE_RET;
+        return vaStatus;
+    }
+
+    ret = wsbmGenBuffers(driver_data->main_pool,
+                         1,
+                         &buf->drm_buf,
+                         4096,  /* page alignment */
+                         0);
+    if (!buf->drm_buf) {
+        psb__error_message("failed to gen wsbm buffers\n");
+        UNLOCK_HARDWARE(driver_data);
+        return VA_STATUS_ERROR_ALLOCATION_FAILED;
+    }
+
+    ret = wsbmBOSetReferenced(buf->drm_buf, kbuf_handle);
+    UNLOCK_HARDWARE(driver_data);
+    if (ret) {
+        psb__error_message("failed to alloc wsbm buffers\n");
+        return VA_STATUS_ERROR_ALLOCATION_FAILED;
+    }
+    buf->pl_flags = wsbmBOPlacementHint(buf->drm_buf);
+
+    return VA_STATUS_SUCCESS;
+}
 /*
  * Destroy buffer
  */
@@ -228,7 +266,7 @@ void psb_buffer_destroy(psb_buffer_p buf)
         ASSERT(buf->driver_data);
         wsbmBOUnreference(&buf->drm_buf);
         if (buf->rar_handle)
-            psb_buffer_destroy_rar(buf->driver_data, buf);
+            buf->rar_handle = 0;
         buf->driver_data = NULL;
         buf->status = psb_bs_unfinished;
     }
@@ -239,7 +277,7 @@ void psb_buffer_destroy(psb_buffer_p buf)
  *
  * Returns 0 on success
  */
-int psb_buffer_map(psb_buffer_p buf, void **address /* out */)
+int psb_buffer_map(psb_buffer_p buf, unsigned char **address /* out */)
 {
     int ret;
 
@@ -318,7 +356,7 @@ int psb_codedbuf_map_mangle(
     object_context_p obj_context = obj_buffer->context;
     INIT_DRIVER_DATA;
     VACodedBufferSegment *p = &obj_buffer->codedbuf_mapinfo[0];
-    void *raw_codedbuf;
+    unsigned char *raw_codedbuf;
     VAStatus vaStatus = VA_STATUS_SUCCESS;
     unsigned int next_buf_off;
     int i;
@@ -349,7 +387,7 @@ int psb_codedbuf_map_mangle(
         p->status = *((unsigned long *) raw_codedbuf + 1); /* 2nd DW
                                                         * is rc status */
         p->reserved = 0;
-        p->buf = (void *)((unsigned long *) raw_codedbuf + 4); /* skip 4DWs */
+        p->buf = (unsigned char *)((unsigned long *) raw_codedbuf + 4); /* skip 4DWs */
         lnc_H264_append_aux_info(obj_context,
                                  obj_buffer,
                                  (unsigned char *)p->buf,
@@ -378,7 +416,7 @@ int psb_codedbuf_map_mangle(
         case VAProfileMPEG4Main:
             /* one segment */
             p->size = *((unsigned long *) raw_codedbuf);
-            p->buf = (void *)((unsigned long *) raw_codedbuf + 4); /* skip 4DWs */
+            p->buf = (unsigned char *)((unsigned long *) raw_codedbuf + 4); /* skip 4DWs */
             psb__information_message("coded buffer size %d\n", p->size);
             break;
 
@@ -388,7 +426,7 @@ int psb_codedbuf_map_mangle(
         case VAProfileH264ConstrainedBaseline:
             /* 1st segment */
             p->size = *((unsigned long *) raw_codedbuf);
-            p->buf = (void *)((unsigned long *) raw_codedbuf + 4); /* skip 4DWs */
+            p->buf = (unsigned char *)((unsigned long *) raw_codedbuf + 4); /* skip 4DWs */
 
             psb__information_message("1st segment coded buffer size %d\n", p->size);
             if (pnw_get_parallel_core_number(obj_context) == 2) {
@@ -401,7 +439,7 @@ int psb_codedbuf_map_mangle(
                 p[1].buf = p->buf;
                 p[1].next = NULL;
                 p->size = *(unsigned long *)((unsigned long)raw_codedbuf + next_buf_off);
-                p->buf = (void *)(((unsigned long *)((unsigned long)raw_codedbuf + next_buf_off)) + 4); /* skip 4DWs */
+                p->buf = (unsigned char *)(((unsigned long *)((unsigned long)raw_codedbuf + next_buf_off)) + 4); /* skip 4DWs */
                 psb__information_message("2nd segment coded buffer offset: 0x%08x,  size: %d\n",
                                          next_buf_off, p->size);
             } else
@@ -411,7 +449,7 @@ int psb_codedbuf_map_mangle(
         case VAProfileH263Baseline:
             /* one segment */
             p->size = *((unsigned long *) raw_codedbuf);
-            p->buf = (void *)((unsigned long *) raw_codedbuf + 4); /* skip 4DWs */
+            p->buf = (unsigned char *)((unsigned long *) raw_codedbuf + 4); /* skip 4DWs */
             psb__information_message("coded buffer size %d\n", p->size);
             break;
 
@@ -423,7 +461,7 @@ int psb_codedbuf_map_mangle(
             /*Max resolution 4096x4096 use 6 segments*/
             for (i = 0; i < PNW_JPEG_MAX_SCAN_NUM + 1; i++) {
                 p->size = *(unsigned long *)((unsigned long)raw_codedbuf + next_buf_off);
-                p->buf = (void *)((unsigned long *)((unsigned long)raw_codedbuf + next_buf_off) + 4);  /* skip 4DWs */
+                p->buf = (unsigned char *)((unsigned long *)((unsigned long)raw_codedbuf + next_buf_off) + 4);  /* skip 4DWs */
                 next_buf_off = *((unsigned long *)((unsigned long)raw_codedbuf + next_buf_off) + 3);
 
                 psb__information_message("JPEG coded buffer segment %d size: %d\n", i, p->size);

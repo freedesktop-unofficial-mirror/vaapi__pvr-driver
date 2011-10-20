@@ -1,34 +1,40 @@
 /*
- * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) 2010 Intel Corporation. All rights reserved.
+ * Copyright (c) Imagination Technologies Limited, UK
+ * Redistribution. Redistribution and use in binary form, without modification,
+ * are permitted provided that the following conditions are met:
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sub license, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to
- * the following conditions:
- * 
- * The above copyright notice and this permission notice (including the
- * next paragraph) shall be included in all copies or substantial portions
- * of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL PRECISION INSIGHT AND/OR ITS SUPPLIERS BE LIABLE FOR
- * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
- * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
- * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * Redistributions must reproduce the above copyright notice and the following
+ * disclaimer in the documentation and/or other materials provided with the
+ * distribution.Neither the name of Intel Corporation nor the names of its
+ * suppliers may be used to endorse or promote products derived from this
+ * software without specific prior written permission. No reverse engineering,
+ * decompilation, or disassembly of this software is permitted.
+ * Limited patent license. Intel Corporation grants a world-wide, royalty-free,
+ * non-exclusive license under patents it now or hereafter owns or controls
+ * to make, have made, use, import,offer to sell and sell ("utilize") this
+ * software, but solely to the extent that any such patent is necessary to
+ * Utilize the software alone. The patent license shall not apply to any
+ * combinations which include this software. No hardware per se is licensed hereunder.
+ *
+ * DISCLAIMER. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 
 // This file was automatically generated from ../release/JPEGSlaveFirmware.dnl using dnl2c.
 
-unsigned char *szJPEGSlaveFirmware_buildtag = "BUILD_TOPAZ_SC_1_00_00_0318";
+unsigned char *szJPEGSlaveFirmware_buildtag="BUILD_TOPAZ_SC_1_00_00_0327";
 
-unsigned long ui32JPEG_SlaveMTXTOPAZFWTextSize = 1469;
+unsigned long ui32JPEG_SlaveMTXTOPAZFWTextSize = 1467;
 unsigned long ui32JPEG_SlaveMTXTOPAZFWDataSize = 240;
 unsigned long ui32JPEG_SlaveMTXTOPAZFWTextRelocSize = 0;
 unsigned long ui32JPEG_SlaveMTXTOPAZFWDataRelocSize = 0;
@@ -36,7 +42,8 @@ unsigned long ui32JPEG_SlaveMTXTOPAZFWDataRelocSize = 0;
 unsigned long ui32JPEG_SlaveMTXTOPAZFWTextOrigin = 0x80900000;
 unsigned long ui32JPEG_SlaveMTXTOPAZFWDataOrigin = 0x82881700;
 
-unsigned long aui32JPEG_SlaveMTXTOPAZFWText[] = {
+unsigned long aui32JPEG_SlaveMTXTOPAZFWText[] =
+{
     0x9040c001,
     0xc80993fe,
     0xc0000e42,
@@ -46,10 +53,10 @@ unsigned long aui32JPEG_SlaveMTXTOPAZFWText[] = {
     0xc1708622,
     0x9e838600,
     0xc8099e43,
-    0xc2dc0d42,
-    0xc8090d20,
+    0xc2da0d42,
+    0xc8090d60,
     0xc2dc0942,
-    0xc8090960,
+    0xc8090920,
     0xc00a0e42,
     0xc8090e40,
     0xc00e87c2,
@@ -61,7 +68,7 @@ unsigned long aui32JPEG_SlaveMTXTOPAZFWText[] = {
     0x9320fffe,
     0xa401c838,
     0x0dc2c809,
-    0x0de0c2da,
+    0x0da0c2da,
     0x0e42c809,
     0x0b46b080,
     0x7e74b77f,
@@ -95,33 +102,31 @@ unsigned long aui32JPEG_SlaveMTXTOPAZFWText[] = {
     0xa6059c22,
     0x0e860a82,
     0xc0540d82,
-    0xc0549a8c,
-    0x0d8a991c,
-    0x9a87c054,
-    0x6508b782,
+    0xc0549a88,
+    0x0d8a9918,
+    0x9a83c054,
+    0x4508b781,
     0xc0007500,
     0xc0549082,
-    0xc0549a0b,
-    0x74029990,
+    0xc0549a07,
+    0x7402998c,
     0xb3549e6c,
     0x02894424,
-    0x9912c054,
+    0x990ec054,
     0xffff7540,
     0xb79f90e2,
     0xb7bf7f6e,
     0x8c407fee,
     0x87029c22,
     0xb5428502,
-    0xb5425c18,
-    0xb5425c98,
-    0xb5425d18,
     0xb5426018,
     0xb5426098,
     0xb5426118,
-    0xb5426518,
-    0xb5426598,
-    0xb5426618,
-    0xb5406918,
+    0xb5426418,
+    0xb5426498,
+    0xb5416518,
+    0xb5424518,
+    0xb5406718,
     0xb5404504,
     0xb5404584,
     0xb5404604,
@@ -133,14 +138,14 @@ unsigned long aui32JPEG_SlaveMTXTOPAZFWText[] = {
     0xb5404202,
     0xb5404282,
     0xb5404984,
-    0xb5406784,
+    0xb5406884,
     0xb5404904,
     0x9c224302,
     0x8420a605,
-    0x9ba6fff4,
+    0x9baafff4,
     0xc0540d8a,
     0xfff49a34,
-    0xc0549bc6,
+    0xc0549bca,
     0xc4209a3f,
     0x0a020cd2,
     0xc000b481,
@@ -199,7 +204,7 @@ unsigned long aui32JPEG_SlaveMTXTOPAZFWText[] = {
     0xc0340a02,
     0xb4810c9e,
     0xfff4c000,
-    0x08029b2c,
+    0x08029b30,
     0x7eeeb79f,
     0x7f6eb7bf,
     0x9c228c60,
@@ -741,7 +746,7 @@ unsigned long aui32JPEG_SlaveMTXTOPAZFWText[] = {
     0x030b038d,
     0xc0000703,
     0x0d8690a0,
-    0x9aeaffd4,
+    0x9aeeffd4,
     0x7b6cb79f,
     0x0c82c03a,
     0xc2001a04,
@@ -1108,26 +1113,26 @@ unsigned long aui32JPEG_SlaveMTXTOPAZFWText[] = {
     0xc0017642,
     0xc8099012,
     0xc0820a42,
-    0xc8090a40,
-    0xc1b208c2,
-    0xf2c808b0,
+    0xc8090a00,
+    0xc1b008c2,
+    0xf2c808f0,
     0xf2c8a221,
     0xc000a0a9,
     0xc8099144,
-    0xc11c0a42,
-    0xf2c80a00,
+    0xc11a0a42,
+    0xf2c80a40,
     0xc000a225,
     0xc8099380,
     0xc10a0a42,
-    0xf2c80a50,
+    0xf2c80a10,
     0xc000a225,
     0xc8099280,
     0xc0f00a42,
-    0xc8090a40,
-    0xc1cc08c2,
-    0xc80908b0,
-    0xc1360cc2,
-    0xf2c80ca0,
+    0xc8090a00,
+    0xc1ca08c2,
+    0xc80908f0,
+    0xc1340cc2,
+    0xf2c80ce0,
     0xf2c8a221,
     0xf2c8a0a9,
     0xb79fa0a6,
@@ -1508,7 +1513,8 @@ unsigned long aui32JPEG_SlaveMTXTOPAZFWText[] = {
     0x09c0b060,
 };
 
-unsigned long aui32JPEG_SlaveMTXTOPAZFWData[] = {
+unsigned long aui32JPEG_SlaveMTXTOPAZFWData[] =
+{
     0x00000000,
     0x00000000,
     0x00000000,
@@ -1531,17 +1537,17 @@ unsigned long aui32JPEG_SlaveMTXTOPAZFWData[] = {
     0x00000000,
     0x00000000,
     0x809000b0,
-    0x80900318,
+    0x80900308,
     0x828819a4,
-    0x82881854,
-    0x82881864,
-    0x828818a0,
-    0x828818dc,
-    0x82881904,
-    0x82881928,
-    0x82881948,
-    0x82881938,
-    0x82881970,
+    0x82881850,
+    0x82881860,
+    0x8288189c,
+    0x828818d8,
+    0x82881900,
+    0x82881924,
+    0x82881944,
+    0x82881934,
+    0x8288196c,
     0x00000000,
     0x00000000,
     0x00000000,
@@ -1664,19 +1670,19 @@ unsigned long aui32JPEG_SlaveMTXTOPAZFWData[] = {
     0x00000000,
     0x00000000,
     0x00000000,
+    0x80902630,
+    0x80902630,
+    0x80902630,
+    0x80902630,
+    0x80902630,
+    0x80902630,
+    0x80902630,
+    0x809006d8,
+    0x809007fc,
+    0x80901db4,
+    0x80902118,
+    0x80902630,
     0x00000000,
-    0x80902640,
-    0x80902640,
-    0x80902640,
-    0x80902640,
-    0x80902640,
-    0x80902640,
-    0x80902640,
-    0x809006e8,
-    0x8090080c,
-    0x80901dc4,
-    0x80902128,
-    0x80902640,
     0x00000000,
     0x00000000,
     0xa0101100,
@@ -1751,18 +1757,22 @@ unsigned long aui32JPEG_SlaveMTXTOPAZFWData[] = {
     0x00000000,
 };
 
-unsigned long aui32JPEG_SlaveMTXTOPAZFWTextReloc[] = {
+unsigned long aui32JPEG_SlaveMTXTOPAZFWTextReloc[] =
+{
     0
 };
 
-unsigned char aui8JPEG_SlaveMTXTOPAZFWTextRelocType[] = {
+unsigned char aui8JPEG_SlaveMTXTOPAZFWTextRelocType[] =
+{
     0
 };
 
-unsigned long aui32JPEG_SlaveMTXTOPAZFWTextRelocFullAddr[] = {
+unsigned long aui32JPEG_SlaveMTXTOPAZFWTextRelocFullAddr[] =
+{
     0
 };
 
-unsigned long aui32JPEG_SlaveMTXTOPAZFWDataReloc[] = {
+unsigned long aui32JPEG_SlaveMTXTOPAZFWDataReloc[] =
+{
     0
 };

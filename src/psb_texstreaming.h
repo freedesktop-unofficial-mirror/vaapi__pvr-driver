@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -82,7 +82,7 @@ typedef struct bc_buf_params {
     enum BC_memory type;
 } bc_buf_params_t;
 
-VAStatus psb_register_video_bcd(
+int psb_add_video_bcd(
     VADriverContextP ctx,
     int width,
     int height,
@@ -90,8 +90,12 @@ VAStatus psb_register_video_bcd(
     int num_surfaces,
     VASurfaceID *surface_list
 );
-
-VAStatus psb_release_video_bcd(VADriverContextP ctx);
+int psb_get_video_bcd(
+    VADriverContextP ctx,
+    VASurfaceID surface
+);
+int psb_register_video_bcd(VADriverContextP ctx);
+int psb_release_video_bcd(VADriverContextP ctx);
 
 /*add for texture streaming end*/
 #endif /*_PSB_TEXSTREAMING_H*/

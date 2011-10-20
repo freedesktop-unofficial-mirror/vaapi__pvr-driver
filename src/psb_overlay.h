@@ -8,11 +8,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -76,6 +76,19 @@
 #define OV_SATURATION_MAX             200
 
 #define CLAMP_ATTR(a,max,min) (a>max?max:(a<min?min:a))
+
+/*DSPCNTR - Display Control Register*/
+#define DISPLAY_PLANE_ENABLE            (1<<31)
+#define DISPLAY_PLANE_DISABLE           0
+#define DISPPLANE_GAMMA_ENABLE          (1<<30)
+#define DISPPLANE_GAMMA_DISABLE         0
+#define DISPPLANE_PIXFORMAT_MASK        (0xf<<26)
+#define DISPPLANE_8BPP              (0x2<<26)
+#define DISPPLANE_15_16BPP          (0x4<<26)
+#define DISPPLANE_16BPP             (0x5<<26)
+#define DISPPLANE_32BPP_NO_ALPHA        (0x6<<26)
+#define DISPPLANE_32BPP             (0x7<<26)
+#define DISPPLANE_BOTTOM            (4)
 
 /*
  * OCMD - Overlay Command Register
@@ -297,7 +310,7 @@ typedef struct _PsbPortPrivRec {
     ov_psb_fixed32 saturation;
     ov_psb_fixed32 hue;
 
-    void * p_iep_lite_context;
+    unsigned char * p_iep_lite_context;
 
     /* hwoverlay */
     uint32_t gamma0;

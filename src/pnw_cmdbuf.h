@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -56,13 +56,13 @@ struct pnw_cmdbuf_s {
     unsigned int size;
 
     /* Relocation records */
-    void *reloc_base;
+    unsigned char *reloc_base;
     struct drm_psb_reloc *reloc_idx;
 
     /* CMD stream data */
     int cmd_count;
-    void *cmd_base;
-    void *cmd_start;
+    unsigned char *cmd_base;
+    unsigned char *cmd_start;
     uint32_t *cmd_idx;
     uint32_t *cmd_idx_saved[3]; /* idx saved for dual-core adjustion */
 
@@ -70,32 +70,32 @@ struct pnw_cmdbuf_s {
      * AboveParam/BellowParam, and the buffer allocated when the context is created
      */
     struct psb_buffer_s *topaz_in_params_I;
-    void *topaz_in_params_I_p;
+    unsigned char *topaz_in_params_I_p;
 
     struct psb_buffer_s *topaz_in_params_P;
-    void *topaz_in_params_P_p;
+    unsigned char *topaz_in_params_P_p;
 
     struct psb_buffer_s *topaz_below_params;
-    void *topaz_below_params_p;
+    unsigned char *topaz_below_params_p;
 
     /* Every frame has its own PIC_PARAMS, SLICE_PARAMS and HEADER mem
      */
 
     /* PicParams: */
     struct psb_buffer_s pic_params;
-    void *pic_params_p;
+    unsigned char *pic_params_p;
 
     /* SeqHeaderMem PicHeaderMem EOSeqHeaderMem  EOStreamHeaderMem SliceHeaderMem[MAX_SLICES_PER_PICTURE]*/
     struct psb_buffer_s header_mem;
-    void *header_mem_p;
+    unsigned char *header_mem_p;
 
     /*SliceParams[MAX_SLICES_PER_PICTURE] */
     struct psb_buffer_s slice_params;
-    void *slice_params_p;
+    unsigned char *slice_params_p;
 
     /* AboveParams[MAX_TOPAZ_CORES]; */
     struct psb_buffer_s *topaz_above_params;
-    void *topaz_above_params_p;
+    unsigned char *topaz_above_params_p;
 
     /* Referenced buffers */
     psb_buffer_p *buffer_refs;
@@ -158,7 +158,7 @@ void pnw_cmdbuf_add_relocation(pnw_cmdbuf_p cmdbuf,
                                uint32_t dst_buffer, /*Index of the list refered by cmdbuf->buffer_refs */
                                uint32_t *start_of_dst_buffer);
 
-#define RELOC_CMDBUF_PNW(dest, offset, buf)     pnw_cmdbuf_add_relocation(cmdbuf, (uint32_t*)(dest), buf, offset, 0XFFFFFFFF, 0, 0, 0, cmdbuf->cmd_start)
+#define RELOC_CMDBUF_PNW(dest, offset, buf)     pnw_cmdbuf_add_relocation(cmdbuf, (uint32_t*)(dest), buf, offset, 0XFFFFFFFF, 0, 0, 0, (uint32_t *)cmdbuf->cmd_start)
 
 /* do relocation in PIC_PARAMS: src/dst Y/UV base, InParamsBase, CodeBase, BellowParamsBase, AboveParamsBase */
 #define RELOC_PIC_PARAMS_PNW(dest, offset, buf) pnw_cmdbuf_add_relocation(cmdbuf, (uint32_t*)(dest), buf, offset, 0XFFFFFFFF, 0, 0, 1, (uint32_t *)cmdbuf->pic_params_p)

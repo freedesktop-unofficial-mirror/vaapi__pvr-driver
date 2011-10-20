@@ -7,11 +7,11 @@
 # distribute, sub license, and/or sell copies of the Software, and to
 # permit persons to whom the Software is furnished to do so, subject to
 # the following conditions:
-# 
+#
 # The above copyright notice and this permission notice (including the
 # next paragraph) shall be included in all copies or substantial portions
 # of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
 # OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
 # MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -20,10 +20,10 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-# Makefile to build MSVDX firmware 
+# Makefile to build MSVDX firmware
 
 CFLAGS = -DFRAME_SWITCHING_VARIANT=1 -DSLICE_SWITCHING_VARIANT=1
-firmware_DATA = msvdx_fw.bin msvdx_fw_mfld.bin msvdx_fw_mfld_DE2.0.bin topaz_fw.bin topazsc_fw.bin 
+firmware_DATA = msvdx_fw.bin msvdx_fw_mfld.bin msvdx_fw_mfld_DE2.0.bin topaz_fw.bin topazsc_fw.bin
 firmwaredir = /lib/firmware
 msvdx_fw_bin_DEPENDENCIES = msvdx_bin
 topaz_fw_bin_DEPENDENCIES = topaz_bin

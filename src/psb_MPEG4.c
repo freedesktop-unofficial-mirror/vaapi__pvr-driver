@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -31,6 +31,7 @@
 #include "psb_def.h"
 #include "psb_surface.h"
 #include "psb_cmdbuf.h"
+#include "pnw_rotate.h"
 
 #include "hwdefs/reg_io2.h"
 #include "hwdefs/msvdx_offsets.h"
@@ -51,6 +52,8 @@
 #define SET_SURFACE_INFO_picture_coding_type(psb_surface, val) psb_surface->extra_info[2] = (uint32_t) val;
 #define GET_SURFACE_INFO_colocated_index(psb_surface) ((int) (psb_surface->extra_info[3]))
 #define SET_SURFACE_INFO_colocated_index(psb_surface, val) psb_surface->extra_info[3] = (uint32_t) val;
+#define SET_SURFACE_INFO_rotate(psb_surface, rotate) psb_surface->extra_info[5] = (uint32_t) rotate;
+#define GET_SURFACE_INFO_rotate(psb_surface) ((int) psb_surface->extra_info[5])
 
 #define SLICEDATA_BUFFER_TYPE(type) ((type==VASliceDataBufferType)?"VASliceDataBufferType":"VAProtectedSliceDataBufferType")
 
@@ -104,7 +107,7 @@ typedef enum {
 
 /* Format is: opcode, width, symbol. All VLC tables are concatenated.                 */
 #define VLC_PACK(a,b,c)         ( ( (a) << 12 ) | ( (b) << 9  ) | (c) )
-const static IMG_UINT16 gaui16mpeg4VlcTableDataPacked[] = {
+static const IMG_UINT16 gaui16mpeg4VlcTableDataPacked[] = {
     VLC_PACK(4 , 0 , 12),    VLC_PACK(5 , 0 , 7),    VLC_PACK(4 , 2 , 13),    VLC_PACK(4 , 3 , 16),    VLC_PACK(5 , 0 , 9),    VLC_PACK(4 , 5 , 17),
     VLC_PACK(2 , 2 , 1),    VLC_PACK(3 , 2 , 0),    VLC_PACK(3 , 2 , 0),    VLC_PACK(4 , 2 , 36),    VLC_PACK(3 , 2 , 0),    VLC_PACK(4 , 0 , 0),
     VLC_PACK(0 , 0 , 6),    VLC_PACK(0 , 0 , 7),    VLC_PACK(2 , 1 , 8),    VLC_PACK(0 , 1 , 10),    VLC_PACK(2 , 1 , 13),    VLC_PACK(0 , 2 , 15),
@@ -500,7 +503,7 @@ static VAStatus psb_MPEG4_CreateContext(
         DEBUG_FAILURE;
     }
     if (vaStatus == VA_STATUS_SUCCESS) {
-        void *vlc_packed_data_address;
+        unsigned char *vlc_packed_data_address;
         if (0 ==  psb_buffer_map(&ctx->vlc_packed_table, &vlc_packed_data_address)) {
             memcpy(vlc_packed_data_address, gaui16mpeg4VlcTableDataPacked, sizeof(gaui16mpeg4VlcTableDataPacked));
             psb_buffer_unmap(&ctx->vlc_packed_table);
@@ -780,6 +783,8 @@ static VAStatus psb__MPEG4_process_picture_param(context_MPEG4_p ctx, object_buf
         REGIO_WRITE_FIELD_LITE(ctx->BE_PICSH_PPS0, MSVDX_VEC_MPEG4, CR_VEC_MPEG4_BE_PICSH_PPS0, BE_PICSH_CODING_TYPE,         ctx->pic_params->vop_fields.bits.vop_coding_type);
     }
 
+    psb_CheckInterlaceRotate(ctx->obj_context, (unsigned char *)ctx->pic_params);
+
     return VA_STATUS_SUCCESS;
 }
 
@@ -865,7 +870,7 @@ static VAStatus psb__MPEG4_add_slice_param(context_MPEG4_p ctx, object_buffer_p 
 {
     ASSERT(obj_buffer->type == VASliceParameterBufferType);
     if (ctx->slice_param_list_idx >= ctx->slice_param_list_size) {
-        void *new_list;
+        unsigned char *new_list;
         ctx->slice_param_list_size += 8;
         new_list = realloc(ctx->slice_param_list,
                            sizeof(object_buffer_p) * ctx->slice_param_list_size);
@@ -941,7 +946,7 @@ static void psb__MPEG4_setup_alternative_frame(context_MPEG4_p ctx)
     psb_surface_p rotate_surface = ctx->obj_context->current_render_target->psb_surface_rotate;
     object_context_p obj_context = ctx->obj_context;
 
-    if (rotate_surface->extra_info[5] != obj_context->rotate)
+    if (GET_SURFACE_INFO_rotate(rotate_surface) != obj_context->msvdx_rotate)
         psb__error_message("Display rotate mode does not match surface rotate mode!\n");
 
 
@@ -959,7 +964,7 @@ static void psb__MPEG4_setup_alternative_frame(context_MPEG4_p ctx)
     REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ALT_PICTURE_ENABLE, 1);
     REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ROTATION_ROW_STRIDE, rotate_surface->stride_mode);
     REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , RECON_WRITE_DISABLE, 0); /* FIXME Always generate Rec */
-    REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ROTATION_MODE, rotate_surface->extra_info[5]);
+    REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ROTATION_MODE, GET_SURFACE_INFO_rotate(rotate_surface));
 
     psb_cmdbuf_rendec_write(cmdbuf, cmd);
 
@@ -999,7 +1004,7 @@ static void psb__MPEG4_set_picture_params(context_MPEG4_p ctx, VASliceParameterB
     }
     psb_cmdbuf_rendec_end_chunk(cmdbuf);
 
-    if (ctx->obj_context->rotate != VA_ROTATION_NONE)
+    if (CONTEXT_ROTATE(ctx->obj_context))
         psb__MPEG4_setup_alternative_frame(ctx);
 
     /* Send VDMC and VDEB commands                                                    */
@@ -1329,7 +1334,7 @@ static VAStatus psb__MPEG4_process_slice_data(context_MPEG4_p ctx, object_buffer
     VAStatus vaStatus = VA_STATUS_SUCCESS;
     VASliceParameterBufferMPEG4 *slice_param;
     int buffer_idx = 0;
-    int element_idx = 0;
+    unsigned int element_idx = 0;
 
 
     ASSERT((obj_buffer->type == VASliceDataBufferType) || (obj_buffer->type == VAProtectedSliceDataBufferType));

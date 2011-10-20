@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -80,11 +80,21 @@ static void pnw_H264ES_QueryConfigAttributes(
 static VAStatus pnw_H264ES_ValidateConfig(
     object_config_p obj_config)
 {
-    VAStatus vaStatus = VA_STATUS_SUCCESS;
-    psb__information_message("pnw_H264ES_ValidateConfig\n");
+    int i;
+    /* Check all attributes */
+    for (i = 0; i < obj_config->attrib_count; i++) {
+        switch (obj_config->attrib_list[i].type) {
+        case VAConfigAttribRTFormat:
+            /* Ignore */
+            break;
+        case VAConfigAttribRateControl:
+            break;
+        default:
+            return VA_STATUS_ERROR_ATTR_NOT_SUPPORTED;
+        }
+    }
 
-    return vaStatus;
-
+    return VA_STATUS_SUCCESS;
 }
 
 
@@ -131,6 +141,8 @@ static VAStatus pnw_H264ES_CreateContext(
         ctx->sRCParams.RCEnable = IMG_TRUE;
     } else
         return VA_STATUS_ERROR_UNSUPPORTED_RT_FORMAT;
+
+    psb__information_message("eCodec is %d\n", ctx->eCodec);
     ctx->eFormat = IMG_CODEC_PL12;      /* use default */
 
     ctx->Slices = 1;
@@ -204,6 +216,11 @@ static VAStatus pnw__H264ES_process_sequence_param(context_ENC_p ctx, object_buf
     obj_buffer->buffer_data = NULL;
     obj_buffer->size = 0;
 
+    if (!pSequenceParams->bits_per_second) {
+        pSequenceParams->bits_per_second = ctx->Height * ctx->Width * 30 * 12;
+        psb__information_message("bits_per_second is 0, set to %d\n",
+                                 pSequenceParams->bits_per_second);
+    }
     ctx->sRCParams.bBitrateChanged =
         (pSequenceParams->bits_per_second == ctx->sRCParams.BitsPerSecond ?
          IMG_FALSE : IMG_TRUE);
@@ -306,8 +323,8 @@ static VAStatus pnw__H264ES_process_sequence_param(context_ENC_p ctx, object_buf
                 free(pSequenceParams);
                 return VA_STATUS_ERROR_ALLOCATION_FAILED;
             }
-            memcpy((void *)ctx->save_seq_header_p,
-                   (void *)(cmdbuf->header_mem_p + ctx->seq_header_ofs),
+            memcpy((unsigned char *)ctx->save_seq_header_p,
+                   (unsigned char *)(cmdbuf->header_mem_p + ctx->seq_header_ofs),
                    HEADER_SIZE);
         }
     }
@@ -391,8 +408,8 @@ static VAStatus pnw__H264ES_process_picture_param(context_ENC_p ctx, object_buff
         if (need_sps) {
             psb__information_message("TOPAZ: insert a SPS before IDR frame\n");
             /* reuse the previous SPS */
-            memcpy((void *)(cmdbuf->header_mem_p + ctx->seq_header_ofs),
-                   (void *)ctx->save_seq_header_p,
+            memcpy((unsigned char *)(cmdbuf->header_mem_p + ctx->seq_header_ofs),
+                   (unsigned char *)ctx->save_seq_header_p,
                    HEADER_SIZE);
 
             cmdbuf->cmd_idx_saved[PNW_CMDBUF_SEQ_HEADER_IDX] = cmdbuf->cmd_idx;
@@ -412,6 +429,7 @@ static VAStatus pnw__H264ES_process_picture_param(context_ENC_p ctx, object_buff
                                           MTX_CMDID_DO_HEADER,
                                           &cmdbuf->header_mem,
                                           ctx->pic_header_ofs);
+
     }
 
     if (ctx->ParallelCores == 1) {
@@ -541,12 +559,12 @@ static VAStatus pnw__H264ES_process_slice_param(context_ENC_p ctx, object_buffer
     VAEncSliceParameterBuffer *pBuf_per_core, *pBuffer;
     pnw_cmdbuf_p cmdbuf = ctx->obj_context->pnw_cmdbuf;
     PIC_PARAMS *psPicParams = (PIC_PARAMS *)(cmdbuf->pic_params_p);
-    int i, j, slice_per_core;
+    unsigned int i, j, slice_per_core;
 
     ASSERT(obj_buffer->type == VAEncSliceParameterBufferType);
 
     cmdbuf = ctx->obj_context->pnw_cmdbuf;
-    psPicParams = cmdbuf->pic_params_p;
+    psPicParams = (PIC_PARAMS *)cmdbuf->pic_params_p;
 
     /* Transfer ownership of VAEncPictureParameterBufferH264 data */
     pBuffer = (VAEncSliceParameterBuffer *) obj_buffer->buffer_data;
@@ -634,7 +652,10 @@ static VAStatus pnw__H264ES_process_misc_param(context_ENC_p ctx, object_buffer_
     VAEncMiscParameterFrameRate *frame_rate_param;
 
     VAStatus vaStatus = VA_STATUS_SUCCESS;
-
+    if (ctx->eCodec != IMG_CODEC_H264_VCM) {
+        psb__information_message("Only VCM mode allow rate control setting.Ignore.\n");
+        return VA_STATUS_SUCCESS;
+    }
     ASSERT(obj_buffer->type == VAEncMiscParameterBufferType);
 
     /* Transfer ownership of VAEncMiscParameterBuffer data */
@@ -645,7 +666,7 @@ static VAStatus pnw__H264ES_process_misc_param(context_ENC_p ctx, object_buffer_
     case VAEncMiscParameterTypeFrameRate:
         frame_rate_param = (VAEncMiscParameterFrameRate *)pBuffer->data;
 
-        if (frame_rate_param->framerate > 65535) {
+        if (frame_rate_param->framerate < 1 || frame_rate_param->framerate > 65535) {
             vaStatus = VA_STATUS_ERROR_INVALID_PARAMETER;
             break;
         }
@@ -672,11 +693,18 @@ static VAStatus pnw__H264ES_process_misc_param(context_ENC_p ctx, object_buffer_
             break;
         }
 
+        if (rate_control_param->window_size > 65535) {
+            psb__error_message("window_size is too much!\n");
+            vaStatus = VA_STATUS_ERROR_INVALID_PARAMETER;
+            break;
+        }
+
         psb__information_message("rate control changed from %d to %d\n",
                                  ctx->sRCParams.BitsPerSecond,
                                  rate_control_param->bits_per_second);
 
         if ((rate_control_param->bits_per_second == ctx->sRCParams.BitsPerSecond) &&
+            (rate_control_param->window_size != 0) &&
             (ctx->sRCParams.BufferSize == ctx->sRCParams.BitsPerSecond / 1000 * rate_control_param->window_size) &&
             (ctx->sRCParams.MinQP == rate_control_param->min_qp) &&
             (ctx->sRCParams.InitialQp == rate_control_param->initial_qp))
@@ -690,7 +718,7 @@ static VAStatus pnw__H264ES_process_misc_param(context_ENC_p ctx, object_buffer_
 			the maximum bitrate, set it with %d\n",
                                      rate_control_param->bits_per_second,
                                      TOPAZ_H264_MAX_BITRATE);
-        } else
+        } else if (rate_control_param->bits_per_second != 0)
             ctx->sRCParams.BitsPerSecond = rate_control_param->bits_per_second;
 
         if (rate_control_param->window_size != 0)
@@ -703,6 +731,13 @@ static VAStatus pnw__H264ES_process_misc_param(context_ENC_p ctx, object_buffer_
 
     case VAEncMiscParameterTypeMaxSliceSize:
         max_slice_size_param = (VAEncMiscParameterMaxSliceSize *)pBuffer->data;
+
+        /*The max slice size should not be bigger than 1920x1080x1.5x8 */
+        if (max_slice_size_param->max_slice_size > 24883200) {
+            psb__error_message("Invalid max_slice_size. It should be 1~ 3110400.\n");
+            vaStatus = VA_STATUS_ERROR_INVALID_PARAMETER;
+            break;
+        }
 
         if (ctx->max_slice_size == max_slice_size_param->max_slice_size)
             break;
@@ -728,7 +763,7 @@ static VAStatus pnw__H264ES_process_misc_param(context_ENC_p ctx, object_buffer_
                                  air_param->air_num_mbs, air_param->air_threshold,
                                  air_param->air_auto);
 
-        if (((ctx->Height * ctx->Width) >> 8) < air_param->air_num_mbs)
+        if (((ctx->Height * ctx->Width) >> 8) < (int)air_param->air_num_mbs)
             air_param->air_num_mbs = ((ctx->Height * ctx->Width) >> 8);
         if (air_param->air_threshold == 0)
             psb__information_message("%s: air threshold is set to zero\n",

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -56,7 +56,7 @@ IMG_UINT32 MVEARegBase[4] = {0x13000, 0x23000, 0x33000, 0x43000}; /* From TopazS
 /* H264 Zero bias */
 //#define ZERO_BIAS
 
-const static IMG_INT8 H263_QPLAMBDA_MAP[31] = {
+static const IMG_INT8 H263_QPLAMBDA_MAP[31] = {
     /* For Quality Evaluation: Not using New H263 Table
      1, 1, 1, 1, 1,
      1, 1, 1, 1, 1,
@@ -75,7 +75,7 @@ const static IMG_INT8 H263_QPLAMBDA_MAP[31] = {
 };
 
 // New MP4 Lambda table
-const static IMG_INT8 MPEG4_QPLAMBDA_MAP[31] = {
+static const  IMG_INT8 MPEG4_QPLAMBDA_MAP[31] = {
     0,  0,  1,  2,  3,
     3,  4,  4,  5,  5,
     6,  6,  7,  7,  8,
@@ -85,7 +85,7 @@ const static IMG_INT8 MPEG4_QPLAMBDA_MAP[31] = {
 };
 
 // new H.264 Lambda
-const static IMG_INT8 H264_QPLAMBDA_MAP[40] = {
+static const IMG_INT8 H264_QPLAMBDA_MAP[40] = {
     2, 2, 2, 2, 3, 3, 4, 4,
     4, 5, 5, 5, 5, 5, 6, 6,
     6, 7, 7, 7, 8, 8, 9, 11,
@@ -183,11 +183,12 @@ static void LoadMPEG4Bias(
     IMG_INT16 iX;
     IMG_UINT32 ui32RegVal;
     IMG_UINT8                       uiDCScaleL, uiDCScaleC, uiLambda;
-    IMG_UINT32 uIPESkipVecBias, iInterMBBias, uSPESkipVecBias, iIntra16Bias;
+    IMG_INT32 uIPESkipVecBias, iInterMBBias, uSPESkipVecBias, iIntra16Bias;
     IMG_UINT32 count = 0, cmd_word = 0;
     uint32_t *pCount;
 
-    cmd_word = (MTX_CMDID_SW_WRITEREG & MTX_CMDWORD_ID_MASK) << MTX_CMDWORD_ID_SHIFT;
+    cmd_word = ((MTX_CMDID_SW_WRITEREG & MTX_CMDWORD_ID_MASK) << MTX_CMDWORD_ID_SHIFT) |
+               ((i32Core & MTX_CMDWORD_CORE_MASK) <<  MTX_CMDWORD_CORE_SHIFT);
     *cmdbuf->cmd_idx++ = cmd_word;
     pCount = cmdbuf->cmd_idx;
     cmdbuf->cmd_idx++;
@@ -238,11 +239,12 @@ static void LoadH263Bias(
     IMG_INT16 iX;
     IMG_UINT32 ui32RegVal;
     IMG_UINT8                       uiDCScaleL, uiDCScaleC, uiLambda;
-    IMG_UINT32 uIPESkipVecBias, iInterMBBias, uSPESkipVecBias, iIntra16Bias;
+    IMG_INT32 uIPESkipVecBias, iInterMBBias, uSPESkipVecBias, iIntra16Bias;
     IMG_UINT32 count = 0, cmd_word = 0;
     uint32_t *pCount;
 
-    cmd_word = (MTX_CMDID_SW_WRITEREG & MTX_CMDWORD_ID_MASK) << MTX_CMDWORD_ID_SHIFT;
+    cmd_word = ((MTX_CMDID_SW_WRITEREG & MTX_CMDWORD_ID_MASK) << MTX_CMDWORD_ID_SHIFT) |
+               ((i32Core & MTX_CMDWORD_CORE_MASK) <<  MTX_CMDWORD_CORE_SHIFT);
     *cmdbuf->cmd_idx++ = cmd_word;
     pCount = cmdbuf->cmd_idx;
     cmdbuf->cmd_idx++;
@@ -298,7 +300,8 @@ static void LoadH264Bias(
     IMG_UINT32 count = 0, cmd_word = 0;
     uint32_t *pCount;
 
-    cmd_word = (MTX_CMDID_SW_WRITEREG & MTX_CMDWORD_ID_MASK) << MTX_CMDWORD_ID_SHIFT;
+    cmd_word = ((MTX_CMDID_SW_WRITEREG & MTX_CMDWORD_ID_MASK) << MTX_CMDWORD_ID_SHIFT) |
+               ((i32Core & MTX_CMDWORD_CORE_MASK) <<  MTX_CMDWORD_CORE_SHIFT);
     *cmdbuf->cmd_idx++ = cmd_word;
     pCount = cmdbuf->cmd_idx;
     cmdbuf->cmd_idx++;
@@ -470,6 +473,12 @@ void pnw_DestroyContext(object_context_p obj_context)
 {
     context_ENC_p ctx;
     ctx = (context_ENC_p)obj_context->format_data;
+
+    psb_buffer_destroy(&ctx->topaz_in_params_P);
+    psb_buffer_destroy(&ctx->topaz_in_params_I);
+    psb_buffer_destroy(&ctx->topaz_below_params);
+    psb_buffer_destroy(&ctx->topaz_above_params);
+
     if (NULL != ctx->slice_param_cache)
         free(ctx->slice_param_cache);
     if (NULL == ctx->save_seq_header_p)
@@ -734,7 +743,7 @@ VAStatus pnw_RenderPictureParameter(context_ENC_p ctx, int core)
     pnw_cmdbuf_p cmdbuf = ctx->obj_context->pnw_cmdbuf;
     VAStatus vaStatus = VA_STATUS_ERROR_UNKNOWN;
 
-    psPicParams = cmdbuf->pic_params_p + ctx->pic_params_size * core;
+    psPicParams = (PIC_PARAMS *)(cmdbuf->pic_params_p + ctx->pic_params_size * core);
 
     memset(psPicParams, 0, sizeof(PIC_PARAMS));
     /* second frame will reuse some rate control parameters (IN_PARAMS_MP4)
@@ -744,7 +753,7 @@ VAStatus pnw_RenderPictureParameter(context_ENC_p ctx, int core)
      */
 
     /*
-    memset(psPicParams, 0, (int)((void *)&psPicParams->sInParams - (void *)psPicParams));
+    memset(psPicParams, 0, (int)((unsigned char *)&psPicParams->sInParams - (unsigned char *)psPicParams));
     */
 
     src_surface = ctx->src_surface;
@@ -923,11 +932,11 @@ VAStatus pnw_RenderPictureParameter(context_ENC_p ctx, int core)
     case IMG_CODEC_PL8:
     case IMG_CODEC_PL12:
         RELOC_PIC_PARAMS_PNW(&psPicParams->SrcUBase,
-                             srf_buf_offset + src_surface->psb_surface->stride * src_surface->height,
+                             srf_buf_offset + src_surface->psb_surface->chroma_offset,
                              &src_surface->psb_surface->buf);
 
         RELOC_PIC_PARAMS_PNW(&psPicParams->SrcVBase,
-                             srf_buf_offset + src_surface->psb_surface->stride * src_surface->height + (src_surface->psb_surface->stride / 2) *(src_surface->height / 2),
+                             srf_buf_offset + src_surface->psb_surface->chroma_offset * 5 / 4,
                              &src_surface->psb_surface->buf);
 
         break;
@@ -994,7 +1003,7 @@ VAStatus pnw_RenderPictureParameter(context_ENC_p ctx, int core)
 static VAStatus pnw_SetupRCParam(context_ENC_p ctx)
 {
     pnw_cmdbuf_p cmdbuf = ctx->obj_context->pnw_cmdbuf;
-    PIC_PARAMS  *psPicParams = cmdbuf->pic_params_p;
+    PIC_PARAMS  *psPicParams = (PIC_PARAMS  *)cmdbuf->pic_params_p;
     PIC_PARAMS  *psPicParamsTmp;
     int origin_qp, i;/* in DDK setup_rc will change qp strangly,
                    * just for keep same with DDK
@@ -1010,9 +1019,9 @@ static VAStatus pnw_SetupRCParam(context_ENC_p ctx)
 
     /* Assume IN_RC_PARAMS for each core is identical, and copy for each */
     for (i = (ctx->ParallelCores - 1); i > 0; i--) {
-        psPicParamsTmp = cmdbuf->pic_params_p + ctx->pic_params_size * i;
-        memcpy((void *)&psPicParamsTmp->sInParams,
-               (void *)&psPicParams->sInParams,
+        psPicParamsTmp = (PIC_PARAMS  *)(cmdbuf->pic_params_p + ctx->pic_params_size * i);
+        memcpy((unsigned char *)&psPicParamsTmp->sInParams,
+               (unsigned char *)&psPicParams->sInParams,
                sizeof(IN_RC_PARAMS));
 
         psPicParamsTmp->THSkip = psPicParams->THSkip;
@@ -1020,7 +1029,7 @@ static VAStatus pnw_SetupRCParam(context_ENC_p ctx)
     }
 
     /* save IN_RC_PARAMS into the cache */
-    memcpy(&ctx->in_params_cache, (void *)&psPicParams->sInParams, sizeof(IN_RC_PARAMS));
+    memcpy(&ctx->in_params_cache, (unsigned char *)&psPicParams->sInParams, sizeof(IN_RC_PARAMS));
     ctx->THSkip = psPicParams->THSkip;
     ctx->pic_params_flags = psPicParams->Flags & ISRC_I16BIAS;
 
@@ -1031,7 +1040,7 @@ static VAStatus pnw_SetupRCParam(context_ENC_p ctx)
 static VAStatus pnw_DetectFrameSkip(context_ENC_p ctx)
 {
     int frame_skip = 0;
-    void *pBuffer;
+    unsigned char *pBuffer;
     IMG_UINT32 *CodedData;
     VAStatus vaStatus;
     psb_surface_p surface;
@@ -1067,7 +1076,7 @@ VAStatus pnw_EndPicture(context_ENC_p ctx)
     VAStatus vaStatus = VA_STATUS_SUCCESS;
     int i;
     pnw_cmdbuf_p cmdbuf = ctx->obj_context->pnw_cmdbuf;
-    PIC_PARAMS *psPicParams = cmdbuf->pic_params_p;
+    PIC_PARAMS *psPicParams = (PIC_PARAMS *)cmdbuf->pic_params_p;
 
     ctx->AccessUnitNum++;
 
@@ -1078,7 +1087,7 @@ VAStatus pnw_EndPicture(context_ENC_p ctx)
             psb__information_message("Bitrate is changed to %d, "
                                      "update the RC data accordingly\n", ctx->sRCParams.BitsPerSecond);
             pnw__update_rcdata(ctx, psPicParams, &ctx->sRCParams);
-            memcpy(&ctx->in_params_cache, (void *)&psPicParams->sInParams, sizeof(IN_RC_PARAMS));
+            memcpy(&ctx->in_params_cache, (unsigned char *)&psPicParams->sInParams, sizeof(IN_RC_PARAMS));
         }
     }
 
@@ -1168,7 +1177,7 @@ VAStatus pnw_EndPicture(context_ENC_p ctx)
 
 static void pnw__setup_busize(context_ENC_p ctx)
 {
-    int old_busize = ctx->sRCParams.BUSize;
+    unsigned int old_busize = ctx->sRCParams.BUSize;
     int slices = ctx->obj_context->slice_count;
 
     /* it is called at EndPicture, we should now the Slice number */
@@ -2030,7 +2039,7 @@ IMG_UINT32 pnw__send_encode_slice_params(
  */
 void pnw_reset_encoder_params(context_ENC_p ctx)
 {
-    void *Add_Below, *Add_Above;
+    unsigned char *Add_Below, *Add_Above;
     pnw_cmdbuf_p cmdbuf = ctx->obj_context->pnw_cmdbuf;
 
     /* all frames share the same Topaz param, in_param/aboveparam/bellow

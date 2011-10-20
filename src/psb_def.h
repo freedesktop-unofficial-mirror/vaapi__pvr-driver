@@ -8,11 +8,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -37,9 +37,7 @@
 /* #define DEBUG_TRACE */
 /* #define DEBUG_TRACE_VERBOSE */
 
-
 #ifdef DEBUG_TRACE
-
 #ifndef ASSERT
 #define ASSERT  assert
 #endif
@@ -52,7 +50,6 @@
 
 #undef ASSERT
 #undef IMG_ASSERT
-
 #define ASSERT(x)
 #define IMG_ASSERT(x)
 
@@ -69,6 +66,12 @@
 
 void psb__error_message(const char *msg, ...);
 void psb__information_message(const char *msg, ...);
+#ifdef ANDROID
+#define psb__android_message(format, ...) \
+    LOGD(format, ##__VA_ARGS__)
+#else
+#define psb__android_message(format, ...)
+#endif
 void psb__trace_message(const char *msg, ...);
 
 

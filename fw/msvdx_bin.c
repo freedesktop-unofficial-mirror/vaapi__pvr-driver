@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -21,10 +21,7 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- */
-
-
-/*
+ *
  * Authors:
  *    Waldo Bastian <waldo.bastian@intel.com>
  *
@@ -95,7 +92,7 @@ int main()
         }
         fclose (ptr);
     */
-    fw.ver = 0x4cd;
+    fw.ver = 0x4ce;
     fw.text_size = ui32MTXDXVAFWTextSize;
     fw.data_size = ui32MTXDXVAFWDataSize;
     fw.data_location = ui32MTXDXVAFWDataLocation;
@@ -162,6 +159,9 @@ int main()
     fw_DE2 = sFirmware1163_SS;
     /* fw_DE2 = sFirmware1163_FS; */
     /* fw_DE2 = sFirmware1133_FS; */
+    fw_DE2 = sFirmware1300_SS;
+    fw_DE2 = sFirmware1311_SS;
+    fw_DE2 = sFirmware1313_SS;
 
     fw.ver = 0x0496;
     fw.text_size = fw_DE2.uiTextSize / 4;

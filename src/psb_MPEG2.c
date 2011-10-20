@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -50,6 +50,8 @@
 #define SET_SURFACE_INFO_picture_structure(psb_surface, val) psb_surface->extra_info[1] = val;
 #define GET_SURFACE_INFO_picture_coding_type(psb_surface) ((int) (psb_surface->extra_info[2]))
 #define SET_SURFACE_INFO_picture_coding_type(psb_surface, val) psb_surface->extra_info[2] = (uint32_t) val;
+#define SET_SURFACE_INFO_rotate(psb_surface, rotate) psb_surface->extra_info[5] = (uint32_t) rotate;
+#define GET_SURFACE_INFO_rotate(psb_surface) ((int) psb_surface->extra_info[5])
 
 
 #define SLICEDATA_BUFFER_TYPE(type) ((type==VASliceDataBufferType)?"VASliceDataBufferType":"VAProtectedSliceDataBufferType")
@@ -70,7 +72,7 @@
 /* Format is: opcode, width, symbol. All VLC tables are concatenated. Index            */
 /* infomation is stored in gui16mpeg2VlcIndexData[]                                    */
 #define VLC_PACK(a,b,c)         ( ( (a) << 12 ) | ( (b) << 9  ) | (c) )
-const static IMG_UINT16 gaui16mpeg2VlcTableDataPacked[] = {
+static const IMG_UINT16 gaui16mpeg2VlcTableDataPacked[] = {
     VLC_PACK(6 , 0 , 0) ,
     VLC_PACK(0 , 0 , 6) ,
     VLC_PACK(4 , 2 , 4) ,
@@ -655,7 +657,7 @@ static VAStatus psb_MPEG2_CreateContext(
         DEBUG_FAILURE;
     }
     if (vaStatus == VA_STATUS_SUCCESS) {
-        void *vlc_packed_data_address;
+        unsigned char *vlc_packed_data_address;
         if (0 ==  psb_buffer_map(&ctx->vlc_packed_table, &vlc_packed_data_address)) {
             memcpy(vlc_packed_data_address, gaui16mpeg2VlcTableDataPacked, sizeof(gaui16mpeg2VlcTableDataPacked));
             psb_buffer_unmap(&ctx->vlc_packed_table);
@@ -870,7 +872,7 @@ static VAStatus psb__MPEG2_add_slice_param(context_MPEG2_p ctx, object_buffer_p 
 {
     ASSERT(obj_buffer->type == VASliceParameterBufferType);
     if (ctx->slice_param_list_idx >= ctx->slice_param_list_size) {
-        void *new_list;
+        unsigned char *new_list;
         ctx->slice_param_list_size += 8;
         new_list = realloc(ctx->slice_param_list,
                            sizeof(object_buffer_p) * ctx->slice_param_list_size);
@@ -922,7 +924,7 @@ static void psb__MPEG2_setup_alternative_frame(context_MPEG2_p ctx)
     psb_surface_p rotate_surface = ctx->obj_context->current_render_target->psb_surface_rotate;
     object_context_p obj_context = ctx->obj_context;
 
-    if (rotate_surface->extra_info[5] != obj_context->rotate)
+    if (GET_SURFACE_INFO_rotate(rotate_surface) != obj_context->msvdx_rotate)
         psb__error_message("Display rotate mode does not match surface rotate mode!\n");
 
 
@@ -940,7 +942,7 @@ static void psb__MPEG2_setup_alternative_frame(context_MPEG2_p ctx)
     REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ALT_PICTURE_ENABLE, 1);
     REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ROTATION_ROW_STRIDE, rotate_surface->stride_mode);
     REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , RECON_WRITE_DISABLE, 0); /* FIXME Always generate Rec */
-    REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ROTATION_MODE, rotate_surface->extra_info[5]);
+    REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ROTATION_MODE, GET_SURFACE_INFO_rotate(rotate_surface));
 
     psb_cmdbuf_rendec_write(cmdbuf, cmd);
 
@@ -954,7 +956,7 @@ static void psb__MPEG2_set_operating_mode(context_MPEG2_p ctx)
 
     psb_cmdbuf_rendec_start_block(cmdbuf);
 
-    if (ctx->obj_context->rotate != VA_ROTATION_NONE)
+    if (CONTEXT_ROTATE(ctx->obj_context))
         psb__MPEG2_setup_alternative_frame(ctx);
 
     psb_cmdbuf_rendec_start_chunk(cmdbuf, RENDEC_REGISTER_OFFSET(MSVDX_CMDS, DISPLAY_PICTURE_SIZE));
@@ -1369,7 +1371,7 @@ static VAStatus psb__MPEG2_process_slice_data(context_MPEG2_p ctx, object_buffer
     VAStatus vaStatus = VA_STATUS_SUCCESS;
     VASliceParameterBufferMPEG2 *slice_param;
     int buffer_idx = 0;
-    int element_idx = 0;
+    unsigned int element_idx = 0;
 
     ASSERT((obj_buffer->type == VASliceDataBufferType) || (obj_buffer->type == VAProtectedSliceDataBufferType));
 
@@ -1475,7 +1477,7 @@ static void psb__MEPG2_send_blit_cmd(context_MPEG2_p ctx)
     REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ALT_PICTURE_ENABLE, 1);
     REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ROTATION_ROW_STRIDE, rotate_surface->stride_mode);
     REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , RECON_WRITE_DISABLE, 0);
-    REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ROTATION_MODE, rotate_surface->extra_info[5]);
+    REGIO_WRITE_FIELD_LITE(cmd, MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION , ROTATION_MODE, GET_SURFACE_INFO_rotate(rotate_surface));
     psb_cmdbuf_reg_set(cmdbuf, REGISTER_OFFSET(MSVDX_CMDS, ALTERNATIVE_OUTPUT_PICTURE_ROTATION), cmd);
     psb_cmdbuf_reg_end_block(cmdbuf);
 
@@ -1575,7 +1577,7 @@ static VAStatus psb_MPEG2_EndPicture(
 
     psb__information_message("psb_MPEG2_EndPicture\n");
 
-    if (ctx->obj_context->rotate != VA_ROTATION_NONE) {
+    if (CONTEXT_ROTATE(ctx->obj_context)) {
         if (!(ctx->pic_params->picture_coding_extension.bits.progressive_frame) &&
             !(ctx->pic_params->picture_coding_extension.bits.is_first_field))
             psb__MPEG2_insert_blit_cmd_to_rotate(ctx);

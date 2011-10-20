@@ -8,11 +8,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -27,7 +27,7 @@
  *
  */
 
-
+#include <unistd.h>
 #include "psb_xrandr.h"
 #include "psb_x11.h"
 
@@ -165,7 +165,7 @@ static void psb_xrandr_hdmi_property(VADriverContextP ctx)
 
 static void psb_xrandr_mipi_location_init(psb_output_device_mode output_device_mode)
 {
-    psb_xrandr_crtc_p local_crtc, extend_crtc;
+    psb_xrandr_crtc_p local_crtc = NULL, extend_crtc = NULL;
 
     switch (output_device_mode) {
     case SINGLE_MIPI0:
@@ -210,7 +210,7 @@ static void psb_xrandr_mipi_location_init(psb_output_device_mode output_device_m
 
 static void psb_xrandr_hdmi_location_init(psb_output_device_mode output_device_mode)
 {
-    psb_xrandr_crtc_p local_crtc, extend_crtc;
+    psb_xrandr_crtc_p local_crtc = NULL, extend_crtc = NULL;
 
     switch (output_device_mode) {
     case SINGLE_HDMI:
@@ -479,6 +479,8 @@ void psb_xrandr_refresh(VADriverContextP ctx)
     }
 
     psb_xrandr_coordinate_init(ctx);
+
+    psb_RecalcRotate(ctx);
     pthread_mutex_unlock(&psb_xrandr_info->psb_extvideo_mutex);
 }
 

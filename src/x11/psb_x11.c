@@ -8,11 +8,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -30,6 +30,7 @@
 #include <X11/Xutil.h>
 #include <X11/extensions/Xrandr.h>
 #include <X11/extensions/dpms.h>
+#include <va/va_dricommon.h>
 #include <va/va_backend.h>
 #include "psb_output.h"
 #include "psb_surface.h"
@@ -51,6 +52,9 @@
 #define IMAGE(id)  ((object_image_p) object_heap_lookup( &driver_data->image_heap, id ))
 #define SUBPIC(id)  ((object_subpic_p) object_heap_lookup( &driver_data->subpic_heap, id ))
 #define CONTEXT(id) ((object_context_p) object_heap_lookup( &driver_data->context_heap, id ))
+
+
+void psb_x11_freeWindowClipBoxList(psb_x11_clip_list_t * pHead);
 
 
 //X error trap
@@ -268,6 +272,9 @@ void *psb_x11_output_init(VADriverContextP ctx)
         return NULL;
     }
 
+    if (getenv("PSB_VIDEO_EXTEND_FULLSCREEN"))
+        driver_data->extend_fullscreen = 1;
+
     if (getenv("PSB_VIDEO_PUTSURFACE_X11")) {
         psb__information_message("Putsurface force to SW rendering\n");
         driver_data->output_method = PSB_PUTSURFACE_X11;
@@ -277,10 +284,33 @@ void *psb_x11_output_init(VADriverContextP ctx)
 
     psb_init_xvideo(ctx, output);
 
+    output->output_drawable = 0;
+    output->extend_drawable = 0;
+    output->pClipBoxList = NULL;
+    output->ui32NumClipBoxList = 0;
+    output->frame_count = 0;
+    output->bIsVisible = 0;
+
     /* always init CTEXTURE and COVERLAY */
     driver_data->coverlay = 1;
     driver_data->color_key = 0x11;
     driver_data->ctexture = 1;
+
+    driver_data->xrandr_dirty = 0;
+    driver_data->xrandr_update = 0;
+
+    if (getenv("PSB_VIDEO_EXTEND_FULLSCREEN")) {
+        driver_data->extend_fullscreen = 1;
+    }
+
+    driver_data->xrandr_thread_id = 0;
+    if (getenv("PSB_VIDEO_NOTRD") || IS_MRST(driver_data)) {
+        psb__information_message("Force not to start psb xrandr thread.\n");
+        driver_data->use_xrandr_thread = 0;
+    } else {
+        psb__information_message("By default, use psb xrandr thread.\n");
+        driver_data->use_xrandr_thread = 1;
+    }
 
     if (IS_MFLD(driver_data) && /* force MFLD to use COVERLAY */
         (driver_data->output_method == PSB_PUTSURFACE_OVERLAY)) {
@@ -323,7 +353,23 @@ error_handler(Display *dpy, XErrorEvent *error)
 
 void psb_x11_output_deinit(VADriverContextP ctx)
 {
+    INIT_DRIVER_DATA;
+    INIT_OUTPUT_PRIV;
+    struct dri_state *dri_state = (struct dri_state *)ctx->dri_state;
+
+    psb_x11_freeWindowClipBoxList(output->pClipBoxList);
+    output->pClipBoxList = NULL;
+
+    if (output->extend_drawable) {
+        XDestroyWindow(ctx->native_dpy, output->extend_drawable);
+        output->extend_drawable = 0;
+    }
+
     psb_deinit_xvideo(ctx);
+
+    /* close dri fd and release all drawable buffer */
+    if (driver_data->ctexture == 1)
+        (*dri_state->close)(ctx);
 }
 
 static void
@@ -363,8 +409,14 @@ static int pnw_check_output_method(VADriverContextP ctx, object_surface_p obj_su
         return 0;
     }
 
+    /* Assign default value for MRST */
+    if (IS_MRST(driver_data))
+        driver_data->output_method = PSB_PUTSURFACE_OVERLAY;
+    else if (IS_MFLD(driver_data))
+        driver_data->output_method = PSB_PUTSURFACE_COVERLAY;
+
     if (driver_data->overlay_auto_paint_color_key)
-	driver_data->output_method = PSB_PUTSURFACE_COVERLAY;
+        driver_data->output_method = PSB_PUTSURFACE_COVERLAY;
 
     /* Avoid call is_window()/XGetWindowAttributes() every frame */
     if (output->output_drawable_save != draw) {
@@ -375,12 +427,22 @@ static int pnw_check_output_method(VADriverContextP ctx, object_surface_p obj_su
             output->is_pixmap = 0;
     }
 
-    if (output->is_pixmap == 1 || (IS_MRST(driver_data) && obj_surface->subpic_count > 0) || width >= 2048 || height >= 2048 ||
-        /*FIXME: overlay path can't handle subpicture scaling. when surface size > dest box, fallback to texblit.*/
-        (IS_MFLD(driver_data) && obj_surface->subpic_count && ((width > destw) || (height > desth)))) {
+    /*FIXME: overlay path can't handle subpicture scaling. when surface size > dest box, fallback to texblit.*/
+    if ((output->is_pixmap == 1)
+        || (IS_MRST(driver_data) && obj_surface->subpic_count > 0)
+        || (IS_MFLD(driver_data) && obj_surface->subpic_count && ((width > destw) || (height > desth)))
+        || (width >= 2048)
+        || (height >= 2048)
+       ) {
         psb__information_message("Putsurface fall back to use Client Texture\n");
 
         driver_data->output_method = PSB_PUTSURFACE_CTEXTURE;
+    }
+
+    if (IS_MFLD(driver_data) &&
+        (driver_data->xrandr_dirty & PSB_NEW_ROTATION)) {
+        psb_RecalcRotate(ctx);
+        driver_data->xrandr_dirty &= ~PSB_NEW_ROTATION;
     }
 
     return 0;
@@ -449,6 +511,11 @@ VAStatus psb_PutSurface(
         psb__information_message("Using client Overlay for PutSurface\n");
 
         srcw = srcw <= 1920 ? srcw : 1920;
+        /* init overlay*/
+        if (!driver_data->coverlay_init) {
+            psb_coverlay_init(ctx);
+            driver_data->coverlay_init = 1;
+        }
 
         psb_putsurface_coverlay(
             ctx, surface, draw,

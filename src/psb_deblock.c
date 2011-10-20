@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -545,7 +545,7 @@ int h264_secondPass(
 
 int psb_cmdbuf_second_pass(object_context_p obj_context,
                            uint32_t OperatingModeCmd,
-                           void * pvParamBase,
+                           unsigned char * pvParamBase,
                            uint32_t PicWidthInMbs,
                            uint32_t FrameHeightInMbs,
                            psb_buffer_p target_buffer,
@@ -564,7 +564,7 @@ int psb_cmdbuf_second_pass(object_context_p obj_context,
 
     item_loc = psb_cmdbuf_buffer_ref(cmdbuf, &cmdbuf->regio_buf);
 
-    cmdbuf->regio_idx = cmdbuf->regio_base;
+    cmdbuf->regio_idx = (uint32_t *)cmdbuf->regio_base;
     cmd_size = cmdbuf->regio_idx++;
 
     h264_pollForSpaceForNCommands(4);

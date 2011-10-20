@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -115,13 +115,13 @@ typedef struct _RC_PARAMS_ {
     IMG_UINT32  BitsConsumed;
     IMG_UINT32  IntraFreq;
     IMG_UINT16  IDRFreq;
-    IMG_INT16   MinQP;
+    IMG_UINT16   MinQP;
     IMG_BOOL    RCEnable;
     IMG_BOOL    FrameSkip;
 
     IMG_UINT8   Slices;
     IMG_UINT32  BitsTransmitted;
-    IMG_INT32   InitialLevel;
+    IMG_UINT32   InitialLevel;
     IMG_INT32   InitialDelay;
     IMG_INT8    QCPOffset;
 
@@ -156,7 +156,7 @@ typedef struct {
 
     IMG_INT32   BitRate;                        /* Bit Rate (bps) */
     IMG_INT32   BufferSize;             /* Size of Buffer */
-    IMG_INT32   InitialLevel;   /* Initial Level of Buffer */
+    IMG_UINT32   InitialLevel;   /* Initial Level of Buffer */
     IMG_INT32   InitialDelay;   /* Initial Delay of Buffer */
 
     IMG_UINT8   ScaleFactor;            /* Scale Factor (H264 only) */
@@ -191,8 +191,8 @@ typedef enum _TH_SKIP_SCALE_ {
 struct context_ENC_s {
     object_context_p obj_context; /* back reference */
 
-    IMG_INT32       NumCores; /* Number of encode cores in Penwell */
-    IMG_INT32       ParallelCores; /* Number of cores to use */
+    IMG_UINT32       NumCores; /* Number of encode cores in Penwell */
+    IMG_UINT32       ParallelCores; /* Number of cores to use */
     IMG_INT32       BelowParamsBufIdx;
 
     IMG_INT16       RawWidth;
@@ -201,7 +201,7 @@ struct context_ENC_s {
     IMG_INT16       Width;  /* ~0xf & (RawWidth + 0xf)*/
     IMG_INT16       Height;     /* ~0xf & (RawHeight + 0xf */
 
-    IMG_INT16       Slices;
+    IMG_UINT16       Slices;
     enum drm_pnw_topaz_codec eCodec;
     IMG_FORMAT      eFormat;
     unsigned int    FCode;
@@ -222,7 +222,7 @@ struct context_ENC_s {
     IMG_UINT32      IPEControl;
     IMG_BOOL        SyncSequencer;
 
-    IMG_INT32       SliceToCore;  /* Core number to send current slice to */
+    IMG_UINT32       SliceToCore;  /* Core number to send current slice to */
     IMG_INT32       LastSliceNum[MAX_TOPAZ_CORES]; /* Slice number of last slice sent to core */
 
     object_surface_p    src_surface;

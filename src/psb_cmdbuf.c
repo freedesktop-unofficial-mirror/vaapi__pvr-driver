@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -342,12 +342,12 @@ void psb_cmdbuf_add_relocation(psb_cmdbuf_p cmdbuf,
 
     /* Check that address is within buffer range */
     if (dst_buffer) {
-        ASSERT(((void *)(addr_in_cmdbuf)) >= cmdbuf->cmd_base);
-        ASSERT(((void *)(addr_in_cmdbuf)) < LLDMA_END(cmdbuf));
+        ASSERT(((unsigned char *)(addr_in_cmdbuf)) >= cmdbuf->cmd_base);
+        ASSERT(((unsigned char *)(addr_in_cmdbuf)) < LLDMA_END(cmdbuf));
         reloc->where = addr_in_cmdbuf - (uint32_t *) cmdbuf->cmd_base; /* Location in DWORDs */
     } else {
-        ASSERT(((void *)(addr_in_cmdbuf)) >= cmdbuf->MTX_msg);
-        ASSERT(((void *)(addr_in_cmdbuf)) < MTXMSG_END(cmdbuf));
+        ASSERT(((unsigned char *)(addr_in_cmdbuf)) >= cmdbuf->MTX_msg);
+        ASSERT(((unsigned char *)(addr_in_cmdbuf)) < MTXMSG_END(cmdbuf));
         reloc->where = addr_in_cmdbuf - (uint32_t *) cmdbuf->MTX_msg; /* Location in DWORDs */
     }
 
@@ -376,7 +376,7 @@ void psb_cmdbuf_add_relocation(psb_cmdbuf_p cmdbuf,
     reloc->dst_buffer = dst_buffer;
     cmdbuf->reloc_idx++;
 
-    ASSERT(((void *)(cmdbuf->reloc_idx)) < RELOC_END(cmdbuf));
+    ASSERT(((unsigned char *)(cmdbuf->reloc_idx)) < RELOC_END(cmdbuf));
 }
 
 /*
@@ -494,17 +494,10 @@ psbDRMCmdBuf(int fd, int ioctl_offset, psb_buffer_p *buffer_list, int buffer_cou
     ca.reloc_offset = relocBufOffset;
     ca.num_relocs = numRelocs;
 
-    ca.damage = damage;
     ca.fence_flags = fence_flags;
     ca.engine = engine;
 
-    ca.feedback_ops = 0;
-    ca.feedback_handle = 0;
-    ca.feedback_offset = 0;
-    ca.feedback_breakpoints = 0;
-    ca.feedback_size = 0;
-
-#if 1
+#if 0
     psb__information_message("PSB submit: buffer_list   = %08x\n", ca.buffer_list);
     psb__information_message("PSB submit: clip_rects    = %08x\n", ca.clip_rects);
     psb__information_message("PSB submit: cmdbuf_handle = %08x\n", ca.cmdbuf_handle);
@@ -539,8 +532,6 @@ psbDRMCmdBuf(int fd, int ioctl_offset, psb_buffer_p *buffer_list, int buffer_cou
 
         }
     } while ((ret == EAGAIN) && (psbTimeDiff(&now, &then) < PSB_TIMEOUT_USEC));
-
-    psb__information_message("command write return is %d\n", ret);
 
     if (ret) {
         psb__information_message("command write return is %d\n", ret);
@@ -606,14 +597,14 @@ out:
 #ifdef DEBUG_TRACE
 
 #define DBH(fmt, arg...)        psb__trace_message(fmt, ##arg)
-#define DB(fmt, arg1, arg...)        psb__trace_message("[%08x] %08x = " fmt, ((void *) arg1) - cmd_start, *arg1, ##arg)
+#define DB(fmt, arg1, arg...)        psb__trace_message("[%08x] %08x = " fmt, ((unsigned char *) arg1) - cmd_start, *arg1, ##arg)
 
 /* See also MsvdxGpuSim() in msvdxgpu.c */
 static void debug_dump_cmdbuf(uint32_t *cmd_idx, uint32_t cmd_size_in_bytes)
 {
     uint32_t cmd_size = cmd_size_in_bytes / sizeof(uint32_t);
     uint32_t *cmd_end = cmd_idx + cmd_size;
-    void *cmd_start = cmd_idx;
+    unsigned char *cmd_start = cmd_idx;
     struct {
         unsigned int start;
         unsigned int end;
@@ -781,7 +772,7 @@ psb_fence_wait(psb_driver_data_p driver_data,
 
     fence = wsbmFenceCreate(driver_data->fence_mgr, fence_rep->fence_class,
                             fence_rep->fence_type,
-                            (void *)fence_rep->handle,
+                            (unsigned char *)fence_rep->handle,
                             0);
     if (fence)
         *status = wsbmFenceFinish(fence, fence_rep->fence_type, 0);
@@ -835,7 +826,7 @@ static void psb__hexdump2(unsigned char *p, int offset, int size)
     psb__trace_message("\n");
 }
 
-static void psb__hexdump(void *addr, int size)
+static void psb__hexdump(unsigned char *addr, int size)
 {
     unsigned char *p = (unsigned char *) addr;
 
@@ -879,8 +870,8 @@ void psb__debug_schedule_hexdump(const char *name, psb_buffer_p buf, uint32_t of
  */
 static void psb_cmdbuf_close_segment(psb_cmdbuf_p cmdbuf)
 {
-    uint32_t bytes_used = ((void *) cmdbuf->cmd_idx - cmdbuf->cmd_start) % MTX_SEG_SIZE;
-    void *segment_start = (void *) cmdbuf->cmd_idx - bytes_used;
+    uint32_t bytes_used = ((unsigned char *) cmdbuf->cmd_idx - cmdbuf->cmd_start) % MTX_SEG_SIZE;
+    unsigned char *segment_start = (unsigned char *) cmdbuf->cmd_idx - bytes_used;
     uint32_t lldma_record_offset = psb_cmdbuf_lldma_create(cmdbuf,
                                    &(cmdbuf->buf), (segment_start - cmdbuf->cmd_base) /* offset */,
                                    bytes_used,
@@ -895,7 +886,7 @@ int psb_context_submit_deblock(object_context_p obj_context)
 {
     psb_cmdbuf_p cmdbuf = obj_context->cmdbuf;
     uint32_t msg_size = FW_VA_DEBLOCK_SIZE;
-    uint32_t *msg = cmdbuf->MTX_msg;
+    uint32_t *msg = (uint32_t *)cmdbuf->MTX_msg;
     DEBLOCKPARAMS* pdbParams;
 
     psb__information_message("Send two pass deblock cmd\n");
@@ -948,7 +939,7 @@ int psb_context_submit_hw_deblock(object_context_p obj_context,
     else
         item_size = FW_VA_RENDER_SIZE;
 
-    uint32_t *msg = cmdbuf->MTX_msg + item_size * cmdbuf->cmd_count;
+    uint32_t *msg = (uint32_t *)(cmdbuf->MTX_msg + item_size * cmdbuf->cmd_count);
 
     memset(msg, 0, sizeof(FW_VA_DEBLOCK_MSG));
     deblock_msg = (FW_VA_DEBLOCK_MSG *)msg;
@@ -990,7 +981,7 @@ int psb_context_submit_oold(object_context_p obj_context,
 {
     psb_cmdbuf_p cmdbuf = obj_context->cmdbuf;
     uint32_t msg_size = FW_VA_OOLD_SIZE;
-    uint32_t *msg = cmdbuf->MTX_msg + cmdbuf->cmd_count * FW_VA_RENDER_SIZE;
+    uint32_t *msg = (uint32_t *)(cmdbuf->MTX_msg + cmdbuf->cmd_count * FW_VA_RENDER_SIZE);
     FW_VA_OOLD_MSG *oold_msg;
 
     if (NULL == src_buf || NULL == dst_buf || NULL == colocate_buffer) {
@@ -1033,15 +1024,15 @@ int psb_context_submit_host_be_opp(object_context_p obj_context, psb_buffer_p ds
     psb_cmdbuf_p cmdbuf = obj_context->cmdbuf;
     uint32_t msg_size = FW_VA_HOST_BE_OPP_SIZE;
 
-    if ((NULL == cmdbuf) || ((0 == cmdbuf->cmd_count) && (0 == cmdbuf->host_be_opp_count) &&
-                             (0 == cmdbuf->deblock_count) || (0 == cmdbuf->frame_info_count))) {
+    if ((NULL == cmdbuf) || (((0 == cmdbuf->cmd_count) && (0 == cmdbuf->host_be_opp_count) &&
+                              (0 == cmdbuf->deblock_count)) || (0 == cmdbuf->frame_info_count))) {
         psb_context_get_next_cmdbuf(obj_context);
         cmdbuf = obj_context->cmdbuf;
     }
-    uint32_t *msg = cmdbuf->MTX_msg + cmdbuf->cmd_count * FW_VA_RENDER_SIZE +
-                    cmdbuf->oold_count * FW_VA_OOLD_SIZE + cmdbuf->frame_info_count * FW_VA_FRAME_INFO_SIZE;
+    uint32_t *msg = (uint32_t *)(cmdbuf->MTX_msg + cmdbuf->cmd_count * FW_VA_RENDER_SIZE +
+                                 cmdbuf->oold_count * FW_VA_OOLD_SIZE + cmdbuf->frame_info_count * FW_VA_FRAME_INFO_SIZE);
 
-    psb__information_message("Send host be opp cmd\n");
+    /* psb__information_message("Send host be opp cmd\n"); */
 
     cmdbuf->host_be_opp_count++;
     memset(msg, 0, msg_size);
@@ -1064,9 +1055,9 @@ int psb_context_submit_frame_info(object_context_p obj_context, psb_buffer_p dst
     psb_cmdbuf_p cmdbuf = obj_context->cmdbuf;
     uint32_t msg_size = FW_VA_FRAME_INFO_SIZE;
 
-    uint32_t *msg = cmdbuf->MTX_msg;
+    uint32_t *msg = (uint32_t *)cmdbuf->MTX_msg;
 
-    psb__information_message("Send frame info cmd\n");
+    /* psb__information_message("Send frame info cmd\n"); */
 
     cmdbuf->frame_info_count++;
     memset(msg, 0, msg_size);
@@ -1100,7 +1091,7 @@ int psb_context_submit_cmdbuf(object_context_p obj_context)
     else
         item_size = FW_VA_RENDER_SIZE;
 
-    uint32_t cmdbuffer_size = (void *) cmdbuf->cmd_idx - cmdbuf->cmd_start; // In bytes
+    uint32_t cmdbuffer_size = (unsigned char *) cmdbuf->cmd_idx - cmdbuf->cmd_start; // In bytes
 
     if (cmdbuf->last_next_segment_cmd) {
         cmdbuffer_size = cmdbuf->first_segment_size;
@@ -1108,11 +1099,11 @@ int psb_context_submit_cmdbuf(object_context_p obj_context)
     }
 
     uint32_t msg_size = item_size;
-    uint32_t *msg = cmdbuf->MTX_msg + cmdbuf->cmd_count * msg_size + cmdbuf->frame_info_count * FW_VA_FRAME_INFO_SIZE;
+    uint32_t *msg = (uint32_t *)(cmdbuf->MTX_msg + cmdbuf->cmd_count * msg_size + cmdbuf->frame_info_count * FW_VA_FRAME_INFO_SIZE);
 
 #ifdef DEBUG_TRACE
     debug_cmd_start[cmdbuf->cmd_count] = cmdbuf->cmd_start - cmdbuf->cmd_base;
-    debug_cmd_size[cmdbuf->cmd_count] = (void *) cmdbuf->cmd_idx - cmdbuf->cmd_start;
+    debug_cmd_size[cmdbuf->cmd_count] = (unsigned char *) cmdbuf->cmd_idx - cmdbuf->cmd_start;
     debug_cmd_count = cmdbuf->cmd_count + 1;
 #endif
 
@@ -1135,7 +1126,7 @@ int psb_context_submit_cmdbuf(object_context_p obj_context)
 
     *cmdbuf->cmd_idx = 0; // Add a trailing 0 just in case.
     ASSERT(cmdbuffer_size < CMD_SIZE);
-    ASSERT((void *) cmdbuf->cmd_idx < CMD_END(cmdbuf));
+    ASSERT((unsigned char *) cmdbuf->cmd_idx < CMD_END(cmdbuf));
 
     MEMIO_WRITE_FIELD(msg, FWRK_GENMSG_SIZE,                  msg_size);
     MEMIO_WRITE_FIELD(msg, FWRK_GENMSG_ID,                    VA_MSGID_RENDER);
@@ -1187,16 +1178,16 @@ int psb_context_submit_cmdbuf(object_context_p obj_context)
     ((uint32_t *)cmdbuf->lldma_idx)[1] = 0;
 #endif
 
-    cmdbuf->cmd_start = cmdbuf->cmd_idx;
+    cmdbuf->cmd_start = (unsigned char *)cmdbuf->cmd_idx;
 
 #ifdef DEBUG_TRACE
     return psb_context_flush_cmdbuf(obj_context);
 #else
     if ((cmdbuf->cmd_count >= MAX_CMD_COUNT) ||
-        (MTXMSG_END(cmdbuf) - (void *) msg < MTXMSG_MARGIN) ||
-        (CMD_END(cmdbuf) - (void *) cmdbuf->cmd_idx < CMD_MARGIN) ||
+        (MTXMSG_END(cmdbuf) - (unsigned char *) msg < MTXMSG_MARGIN) ||
+        (CMD_END(cmdbuf) - (unsigned char *) cmdbuf->cmd_idx < CMD_MARGIN) ||
         (LLDMA_END(cmdbuf) - cmdbuf->lldma_idx < LLDMA_MARGIN) ||
-        (RELOC_END(cmdbuf) - (void *) cmdbuf->reloc_idx < RELOC_MARGIN)) {
+        (RELOC_END(cmdbuf) - (unsigned char *) cmdbuf->reloc_idx < RELOC_MARGIN)) {
         return psb_context_flush_cmdbuf(obj_context);
     }
 #endif
@@ -1229,7 +1220,7 @@ int psb_context_flush_cmdbuf(object_context_p obj_context)
     }
 
     uint32_t msg_size = 0;
-    uint32_t *msg = cmdbuf->MTX_msg;
+    uint32_t *msg = (uint32_t *)cmdbuf->MTX_msg;
     int i;
 
     /* LOCK */
@@ -1320,11 +1311,11 @@ int psb_context_flush_cmdbuf(object_context_p obj_context)
 
     /* Now calculate the total number of relocations */
     reloc_offset = cmdbuf->reloc_base - cmdbuf->MTX_msg;
-    num_relocs = (((void *) cmdbuf->reloc_idx) - cmdbuf->reloc_base) / sizeof(struct drm_psb_reloc);
+    num_relocs = (((unsigned char *) cmdbuf->reloc_idx) - cmdbuf->reloc_base) / sizeof(struct drm_psb_reloc);
 
 #ifdef DEBUG_TRACE
     psb__information_message("Cmdbuf MTXMSG size = %08x [%08x]\n", msg_size, MTXMSG_SIZE);
-    psb__information_message("Cmdbuf CMD size = %08x - %d[%08x]\n", (void *) cmdbuf->cmd_idx - cmdbuf->cmd_base, cmdbuf->cmd_count, CMD_SIZE);
+    psb__information_message("Cmdbuf CMD size = %08x - %d[%08x]\n", (unsigned char *) cmdbuf->cmd_idx - cmdbuf->cmd_base, cmdbuf->cmd_count, CMD_SIZE);
     psb__information_message("Cmdbuf LLDMA size = %08x [%08x]\n", cmdbuf->lldma_idx - cmdbuf->lldma_base, LLDMA_SIZE);
     psb__information_message("Cmdbuf RELOC size = %08x [%08x]\n", num_relocs * sizeof(struct drm_psb_reloc), RELOC_SIZE);
 #endif
@@ -1414,7 +1405,7 @@ int psb_context_flush_cmdbuf(object_context_p obj_context)
 
     psb__trace_message("debug_dump_count = %d\n", debug_dump_count);
     for (i = 0; i < debug_dump_count; i++) {
-        void *buf_addr;
+        unsigned char *buf_addr;
         psb__trace_message("Buffer %d = '%s' offset = %08x size = %08x\n", i, debug_dump_name[i], debug_dump_offset[i], debug_dump_size[i]);
         if (debug_dump_buf[i]->rar_handle
             || (psb_buffer_map(debug_dump_buf[i], &buf_addr) != 0)) {
@@ -1660,7 +1651,7 @@ uint32_t psb_cmdbuf_lldma_create(psb_cmdbuf_p cmdbuf,
                                  uint32_t dest_offset,
                                  LLDMA_TYPE cmd)
 {
-    uint32_t lldma_record_offset = (((void*)cmdbuf->lldma_idx) - ((void *) cmdbuf->cmd_base));
+    uint32_t lldma_record_offset = (((unsigned char *)cmdbuf->lldma_idx) - ((unsigned char *) cmdbuf->cmd_base));
     psb_cmdbuf_lldma_create_internal(cmdbuf, 0, bitstream_buf, buffer_offset, size,
                                      dest_offset, cmd);
     return lldma_record_offset;
@@ -1805,7 +1796,7 @@ static void psb_cmdbuf_lldma_create_internal(psb_cmdbuf_p cmdbuf,
         }
 
         /* Keep pointer in case we need to chain another LLDMA command */
-        cmdbuf->lldma_last = (void *) pasDmaList;
+        cmdbuf->lldma_last = (unsigned char *) pasDmaList;
 
         DMA_LL_SET_WD0(pasDmaList, DMA_BSWAP_NO_SWAP,
                        (pDmaDetail->eDMADir == HOST_TO_MSVDX) ? DMA_DIR_MEM_TO_PERIPH : DMA_DIR_PERIPH_TO_MEM ,
@@ -1820,7 +1811,7 @@ static void psb_cmdbuf_lldma_create_internal(psb_cmdbuf_p cmdbuf,
     }
 
     /* there can be up to 3 Bytes of padding after header */
-    cmdbuf->lldma_idx    = (void *)pasDmaList;
+    cmdbuf->lldma_idx    = (unsigned char *)pasDmaList;
 }
 
 
@@ -1917,7 +1908,7 @@ void psb_cmdbuf_rendec_write_block(psb_cmdbuf_p cmdbuf,
                                    uint32_t size)
 {
     ASSERT((size & 0x3) == 0);
-    int i;
+    unsigned int i;
     for (i = 0; i < size; i += 4) {
         uint32_t val = block[i] | (block[i+1] << 8) | (block[i+2] << 16) | (block[i+3] << 24);
         psb_cmdbuf_rendec_write(cmdbuf, val);
@@ -1989,7 +1980,7 @@ void psb_cmdbuf_rendec_end_block(psb_cmdbuf_p cmdbuf)
  */
 uint32_t psb_cmdbuf_segment_space(psb_cmdbuf_p cmdbuf)
 {
-    uint32_t bytes_used = (void *) cmdbuf->cmd_idx - cmdbuf->cmd_start;
+    uint32_t bytes_used = (unsigned char *) cmdbuf->cmd_idx - cmdbuf->cmd_start;
     return (MTX_SEG_SIZE - (bytes_used % MTX_SEG_SIZE)) / sizeof(uint32_t);
 }
 
@@ -2005,7 +1996,7 @@ void psb_cmdbuf_next_segment(psb_cmdbuf_p cmdbuf)
     if (cmdbuf->last_next_segment_cmd) {
         psb_cmdbuf_close_segment(cmdbuf);
     } else {
-        cmdbuf->first_segment_size = (void *) cmdbuf->cmd_idx - cmdbuf->cmd_start;
+        cmdbuf->first_segment_size = (unsigned char *) cmdbuf->cmd_idx - cmdbuf->cmd_start;
     }
 
     cmdbuf->cmd_idx += words_free; /* move pui32CmdBuffer to start of next segment */

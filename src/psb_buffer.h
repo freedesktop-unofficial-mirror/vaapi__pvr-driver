@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -31,8 +31,6 @@
 #define _PSB_BUFFER_H_
 
 #include "psb_drv_video.h"
-
-#include <RAR/rar.h>
 
 //#include "xf86mm.h"
 
@@ -72,7 +70,7 @@ struct psb_buffer_s {
     uint32_t rar_handle;
     unsigned int buffer_ofs; /* several buffers may share one BO (camera/RAR), and use offset to distinguish it */
     struct psb_buffer_s *next;
-    void *user_ptr; /* user pointer for user buffers */
+    unsigned char *user_ptr; /* user pointer for user buffers */
     psb_driver_data_p driver_data; /* for RAR buffer release */
 };
 
@@ -98,6 +96,13 @@ VAStatus psb_buffer_reference(psb_driver_data_p driver_data,
                               psb_buffer_p buf,
                               psb_buffer_p reference_buf
                              );
+/*
+ *
+ */
+VAStatus psb_kbuffer_reference(psb_driver_data_p driver_data,
+                               psb_buffer_p buf,
+                               int kbuf_handle
+                              );
 
 /*
  * Suspend buffer
@@ -114,7 +119,7 @@ void psb_buffer_destroy(psb_buffer_p buf);
  *
  * Returns 0 on success
  */
-int psb_buffer_map(psb_buffer_p buf, void **address /* out */);
+int psb_buffer_map(psb_buffer_p buf, unsigned char **address /* out */);
 
 int psb_buffer_sync(psb_buffer_p buf);
 
@@ -142,28 +147,6 @@ VAStatus psb_buffer_create_camera(psb_driver_data_p driver_data,
                                  );
 
 /*
- * Create RAR buffer
- */
-VAStatus psb_buffer_create_rar(psb_driver_data_p driver_data,
-                               unsigned int size,
-                               psb_buffer_p buf
-                              );
-
-/*
- * Destroy RAR buffer
- */
-VAStatus psb_buffer_destroy_rar(psb_driver_data_p driver_data,
-                                psb_buffer_p buf
-                               );
-
-/*
- * Reference one RAR buffer from handle
- */
-VAStatus psb_buffer_reference_rar(psb_driver_data_p driver_data,
-                                  uint32_t rar_handle,
-                                  psb_buffer_p buf
-                                 );
-/*
  * Create one buffer from user buffer
  * id_or_ofs is CI frame ID (actually now is frame offset), or V4L2 buffer offset
  * user_ptr :virtual address of user buffer start.
@@ -173,12 +156,10 @@ VAStatus psb_buffer_create_camera_from_ub(psb_driver_data_p driver_data,
         int id_or_ofs,
         int size,
         const unsigned long * user_ptr);
-#ifdef ANDROID
-#define DRM_PSB_FLAG_MEM_CI (1<<9)
-#define DRM_PSB_FLAG_MEM_RAR (1<<10)
-#else
-#define DRM_PSB_FLAG_MEM_CI     (1 << 3) /* TTM_PL_FLAG_PRIV0 */
-#define DRM_PSB_FLAG_MEM_RAR    (1 << 5) /* TTM_PL_FLAG_PRIV2 */
-#endif
+
+VAStatus psb_buffer_reference_imr(psb_driver_data_p driver_data,
+                                  uint32_t imr_offset,
+                                  psb_buffer_p buf
+                                 );
 
 #endif /* _PSB_BUFFER_H_ */

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -64,7 +64,7 @@
        : (core))
 
 #define JPEG_MCU_PER_SCAN(width, height, core, eFormat) \
-     ((JPEG_MCU_PER_CORE(width, height, core, eFormat) > JPEG_MAX_MCU_PER_SCAN) ? \
+    ((JPEG_MCU_PER_CORE(width, height, core, eFormat) > JPEG_MAX_MCU_PER_SCAN) ? \
     JPEG_MAX_MCU_PER_SCAN : JPEG_MCU_PER_CORE(width, height, core, eFormat))
 
 /*The start address of every segment must align 128bits -- DMA burst width*/
@@ -573,7 +573,7 @@ typedef struct {
 //////////////////////////////////////////////////////////////////////////////////////////////
 
 typedef struct {
-    void * pMemInfo;
+    unsigned char * pMemInfo;
     IMG_UINT16 ui16ScanNumber;
     IMG_UINT32 ui32WriteBackVal;
     IMG_INT8 i8MTXNumber; // Doubles as status indicator ( <0 = Awaiting output to CB, 0 = Idle, >0 = Being filled by MTX)
@@ -612,10 +612,10 @@ typedef struct context_jpeg_ENC_s {
     IMG_UINT32 ui32InitialCBOffset;
 
     object_surface_p pSourceSurface;
-    void * pMemInfoMTXSetup;
+    unsigned char * pMemInfoMTXSetup;
     JPEG_MTX_DMA_SETUP* pMTXSetup;
 
-    void * pMemInfoTableBlock;
+    unsigned char * pMemInfoTableBlock;
     JPEG_MTX_QUANT_TABLE        *psTablesBlock;
 
     IMG_UINT32 ui32Offsets[MTX_MAX_COMPONENTS];
@@ -624,7 +624,7 @@ typedef struct context_jpeg_ENC_s {
 
     IMG_CODED_BUFFER jpeg_coded_buf;
 
-    void *ctx;
+    unsigned char *ctx;
     IMG_UINT32 ui32SizePerCodedBuffer;
     IMG_UINT8  ui8ScanNum;
 } TOPAZSC_JPEG_ENCODER_CONTEXT;
@@ -670,6 +670,6 @@ IMG_ERRORCODE IMG_JPEG_AllocateCodedBuffer(IMG_UINT32 ui32CBufferSize, IMG_CODED
 IMG_ERRORCODE InitializeJpegEncode(TOPAZSC_JPEG_ENCODER_CONTEXT * pContext, object_surface_p pTFrame);
 IMG_ERRORCODE SetupJPEGTables(TOPAZSC_JPEG_ENCODER_CONTEXT * pContext, IMG_CODED_BUFFER *pCBuffer,  object_surface_p pTFrame);
 IMG_ERRORCODE SubmitScanToMTX(TOPAZSC_JPEG_ENCODER_CONTEXT *pContext, IMG_UINT16 ui16BCnt, IMG_INT8 i8MTXNumber, IMG_UINT32 ui32NoMCUsToEncode);
-void pnw_jpeg_set_default_qmatix(void *pMemInfoTableBlock);
+void pnw_jpeg_set_default_qmatix(unsigned char *pMemInfoTableBlock);
 void fPutBitsToBuffer(STREAMTYPEW *BitStream, IMG_UINT8 NoOfBytes, IMG_UINT32 ActualBits);
 #endif /*_HOST_JPEG_H_*/

@@ -8,11 +8,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -44,12 +44,15 @@
 #include "psb_overlay.h"
 
 #ifdef ANDROID
-#define psb_xrandr_single_mode() 1
+#define psb_xrandr_single_mode() 0
+#else
+int psb_xrandr_single_mode();
 #endif
 
 #define INIT_DRIVER_DATA    psb_driver_data_p driver_data = (psb_driver_data_p) ctx->pDriverData
 #define SURFACE(id) ((object_surface_p) object_heap_lookup( &driver_data->surface_heap, id ))
 #define CONTEXT(id) ((object_context_p) object_heap_lookup( &driver_data->context_heap, id ))
+#define GET_SURFACE_INFO_rotate(psb_surface) ((int) (psb_surface)->extra_info[5])
 
 #ifndef VA_FOURCC_I420
 #define VA_FOURCC_I420          0x30323449
@@ -70,11 +73,9 @@ I830ResetVideo(VADriverContextP ctx, PsbPortPrivPtr pPriv)
     I830OverlayRegPtr overlayC = (I830OverlayRegPtr)(pPriv->regmap[1]);
     long offsetA = wsbmBOOffsetHint(pPriv->wsbo[0]) & 0x0FFFFFFF;
     long offsetC = wsbmBOOffsetHint(pPriv->wsbo[1]) & 0x0FFFFFFF;
-    struct drm_psb_register_rw_arg regs;
 
     memset(overlayA, 0, sizeof(*overlayA));
     memset(overlayC, 0, sizeof(*overlayC));
-    memset(&regs, 0, sizeof(regs));
 
     overlayA->OCLRC0 = (pPriv->contrast.Value << 18) | (pPriv->brightness.Value & 0xff);
     overlayA->OCLRC1 = pPriv->saturation.Value;
@@ -100,22 +101,6 @@ I830ResetVideo(VADriverContextP ctx, PsbPortPrivPtr pPriv)
 
     overlayC->DWINSZ = 0x00000000;
     overlayC->OCONFIG = CC_OUT_8BIT;
-    regs.overlay_read_mask = OVC_REGRWBITS_OVADD;
-    drmCommandWriteRead(driver_data->drm_fd, DRM_PSB_REGISTER_RW, &regs, sizeof(regs));
-    regs.overlay_read_mask = 0;
-    regs.overlay_write_mask = OVC_REGRWBITS_OVADD;
-    regs.overlay.OVADD &= ~(0xffff << 16);
-    regs.overlay.OVADD |= offsetC;
-    drmCommandWriteRead(driver_data->drm_fd, DRM_PSB_REGISTER_RW, &regs, sizeof(regs));
-
-    memset(&regs, 0, sizeof(regs));
-    regs.overlay_read_mask = OV_REGRWBITS_OVADD;
-    drmCommandWriteRead(driver_data->drm_fd, DRM_PSB_REGISTER_RW, &regs, sizeof(regs));
-    regs.overlay_read_mask = 0;
-    regs.overlay_write_mask = OV_REGRWBITS_OVADD;
-    regs.overlay.OVADD &= ~(0xffff << 16);
-    regs.overlay.OVADD |= offsetA;
-    drmCommandWriteRead(driver_data->drm_fd, DRM_PSB_REGISTER_RW, &regs, sizeof(regs));
 }
 
 static uint32_t I830BoundGammaElt(uint32_t elt, uint32_t eltPrev)
@@ -173,15 +158,19 @@ static void I830StopVideo(VADriverContextP ctx)
 {
     INIT_DRIVER_DATA;
     PsbPortPrivPtr pPriv = (PsbPortPrivPtr)(&driver_data->coverlay_priv);
-    long offsetA = wsbmBOOffsetHint(pPriv->wsbo[0]) & 0x0FFFFFFF;
-    I830OverlayRegPtr overlayA = (I830OverlayRegPtr)(pPriv->regmap[0]);
-    I830OverlayRegPtr overlayC = (I830OverlayRegPtr)(pPriv->regmap[1]);
+    I830OverlayRegPtr overlayA, overlayC;
     struct drm_psb_register_rw_arg regs;
 
+    if (!pPriv->overlayA_enabled && !pPriv->overlayC_enabled) {
+        psb__information_message("I830StopVideo : no overlay has been enabled, do nothing.\n");
+        return;
+    }
+
+    overlayA = (I830OverlayRegPtr)(pPriv->regmap[0]);
+    overlayC = (I830OverlayRegPtr)(pPriv->regmap[1]);
 #if 0
     REGION_EMPTY(pScrn->pScreen, &pPriv->clip);
 #endif
-
     memset(&regs, 0, sizeof(regs));
     if (pPriv->subpicture_enabled) {
         regs.subpicture_disable_mask = pPriv->subpicture_enable_mask;
@@ -196,9 +185,11 @@ static void I830StopVideo(VADriverContextP ctx)
             regs.overlay_read_mask = OVC_REGRWBITS_OVADD;
             drmCommandWriteRead(driver_data->drm_fd, DRM_PSB_REGISTER_RW, &regs, sizeof(regs));
 
+            overlayC->DWINSZ = 0x00000000;
             overlayC->OCMD &= ~OVERLAY_ENABLE;
             regs.overlay_read_mask = 0;
             regs.overlay_write_mask = OVC_REGRWBITS_OVADD;
+            regs.overlay.b_wait_vblank = 1;
             drmCommandWriteRead(driver_data->drm_fd, DRM_PSB_REGISTER_RW, &regs, sizeof(regs));
 
             memset(&regs, 0, sizeof(regs));
@@ -208,17 +199,25 @@ static void I830StopVideo(VADriverContextP ctx)
             regs.overlay_read_mask = OV_REGRWBITS_OVADD;
             drmCommandWriteRead(driver_data->drm_fd, DRM_PSB_REGISTER_RW, &regs, sizeof(regs));
 
+            overlayA->DWINSZ = 0x00000000;
             overlayA->OCMD &= ~OVERLAY_ENABLE;
             regs.overlay_read_mask = 0;
             regs.overlay_write_mask = OV_REGRWBITS_OVADD;
+            regs.overlay.b_wait_vblank = 1;
             drmCommandWriteRead(driver_data->drm_fd, DRM_PSB_REGISTER_RW, &regs, sizeof(regs));
             pPriv->overlayA_enabled = 0;
         }
     } else {
-        regs.overlay_write_mask = OV_REGRWBITS_OVADD;
-        regs.overlay.OVADD = offsetA;
-        pPriv->overlayA_enabled = 0;
+        regs.overlay_read_mask = OV_REGRWBITS_OVADD;
         drmCommandWriteRead(driver_data->drm_fd, DRM_PSB_REGISTER_RW, &regs, sizeof(regs));
+
+        overlayA->DWINSZ = 0x00000000;
+        overlayA->OCMD &= ~OVERLAY_ENABLE;
+        regs.overlay_read_mask = 0;
+        regs.overlay_write_mask = OV_REGRWBITS_OVADD;
+        regs.overlay.b_wait_vblank = 1;
+        drmCommandWriteRead(driver_data->drm_fd, DRM_PSB_REGISTER_RW, &regs, sizeof(regs));
+        pPriv->overlayA_enabled = 0;
     }
 }
 
@@ -423,6 +422,22 @@ i830_display_video(
     int i32EnableIEP = 0;
     int i32EnableIEPBLE = 0;
 
+    /*before enabling overlay, make sure overlay is disabled first.*/
+    if ((overlayId == OVERLAY_A) && !pPriv->overlayA_enabled) {
+        memset(&regs, 0, sizeof(regs));
+        regs.overlay_read_mask = OV_REGRWBITS_OVADD;
+        drmCommandWriteRead(driver_data->drm_fd, DRM_PSB_REGISTER_RW, &regs, sizeof(regs));
+
+        overlay->OCMD &= ~OVERLAY_ENABLE;
+        regs.overlay_read_mask = 0;
+        regs.overlay_write_mask = OV_REGRWBITS_OVADD;
+        drmCommandWriteRead(driver_data->drm_fd, DRM_PSB_REGISTER_RW, &regs, sizeof(regs));
+    }
+
+    /* FIXME: don't know who and why add this
+     *        comment it for full screen scale issue
+     *        any concern contact qiang.miao@intel.com
+     */
 #if 0
     if (drw_w >= 800) {
         x2 = x2 / 4;
@@ -757,9 +772,9 @@ i830_display_video(
     }
 
     if (pPriv->is_mfld) {
-            i32EnableIEP = 0;
+        i32EnableIEP = 0;
 
-            i32EnableIEPBLE = 0;
+        i32EnableIEPBLE = 0;
 
         if (i32EnableIEP == 0) {
             overlay->OCONFIG = CC_OUT_8BIT;
@@ -767,7 +782,8 @@ i830_display_video(
             overlay->OCONFIG |= IEP_LITE_BYPASS;
             regs.overlay.OVADD = offset | 1;
             regs.overlay.IEP_ENABLED = 0;
-        } 
+            regs.overlay.buffer_handle = wsbmKBufHandle(wsbmKBuf(pPriv->wsbo[overlayId]));
+        }
     } else {
         overlay->OCONFIG = CC_OUT_8BIT;
         overlay->OCONFIG |= IEP_LITE_BYPASS;
@@ -808,6 +824,156 @@ i830_display_video(
     }
 }
 
+
+static void I830PutImageFlipRotateSurface(
+    VADriverContextP ctx,
+    object_surface_p obj_surface,
+    int *src_w_new, int *src_h_new,
+    int *width_new, int *height_new,
+    psb_surface_p *psb_surface_new,
+    int pipeId)
+{
+    int src_w = *src_w_new, src_h =  *src_h_new;
+    int width = *width_new, height = *height_new;
+    int  tmp = 0;
+
+    psb_surface_p psb_surface = NULL;
+    INIT_DRIVER_DATA;
+    PsbPortPrivPtr pPriv;
+
+    /* local/extend display doesn't have render rotation */
+    if (((pipeId == PIPEA) && (driver_data->local_rotation == VA_ROTATION_NONE)) ||
+        ((pipeId == PIPEB) && (driver_data->extend_rotation == VA_ROTATION_NONE)))
+        return;
+
+    pPriv = (PsbPortPrivPtr)(&driver_data->coverlay_priv);
+
+    if (pipeId == PIPEA) {
+        if (driver_data->local_rotation != VA_ROTATION_NONE) {
+            psb_surface = obj_surface->psb_surface_rotate;
+            width = obj_surface->width_r;
+            height = obj_surface->height_r;
+            if (driver_data->local_rotation != VA_ROTATION_180) {
+                tmp = src_w;
+                src_w = src_h;
+                src_h = tmp;
+            }
+        }
+        if ((driver_data->local_rotation == VA_ROTATION_NONE) ||
+            (driver_data->local_rotation == VA_ROTATION_180)) {
+            pPriv->width_save = pPriv->display_width;
+            pPriv->height_save = pPriv->display_height;
+        } else {
+            pPriv->width_save = pPriv->display_height;
+            pPriv->height_save = pPriv->display_width;
+        }
+        if (driver_data->is_android == 0)
+            pPriv->rotation = driver_data->local_rotation;
+        else
+            pPriv->rotation = 0;
+    } else if (pipeId == PIPEB) {
+        if (driver_data->extend_rotation != VA_ROTATION_NONE) {
+            psb_surface = obj_surface->psb_surface_rotate;
+            width = obj_surface->width_r;
+            height = obj_surface->height_r;
+            if (driver_data->extend_rotation != VA_ROTATION_180) {
+                tmp = src_w;
+                src_w = src_h;
+                src_h = tmp;
+            }
+        }
+        if ((driver_data->extend_rotation == VA_ROTATION_NONE) ||
+            (driver_data->extend_rotation == VA_ROTATION_180)) {
+            pPriv->width_save = pPriv->extend_display_width;
+            pPriv->height_save = pPriv->extend_display_height;
+        } else {
+            pPriv->width_save = pPriv->extend_display_height;
+            pPriv->height_save = pPriv->extend_display_width;
+        }
+        if (driver_data->is_android == 0)
+            pPriv->rotation = driver_data->extend_rotation;
+        else
+            pPriv->rotation = 0;
+    }
+
+    *src_w_new = src_w;
+    *src_h_new = src_h;
+    *width_new = width;
+    *height_new = height;
+    *psb_surface_new = psb_surface;
+}
+
+
+static void I830PutImageFlipRotateDebug(
+    VADriverContextP ctx,
+    VASurfaceID surface,
+    short src_x, short src_y,
+    short src_w, short src_h,
+    short drw_x, short drw_y,
+    short drw_w, short drw_h,
+    int fourcc, int flags,
+    int overlayId,
+    int pipeId)
+{
+    INIT_DRIVER_DATA;
+    object_surface_p obj_surface = SURFACE(surface);
+    psb_surface_p psb_surface = NULL;
+
+    if (pipeId != 0)
+        return;
+
+    psb_surface = obj_surface->psb_surface_rotate;
+    psb_buffer_p buf = &psb_surface->buf;
+    unsigned char *data, *chroma, *buffer, *header;
+    static FILE *pf = NULL;
+    int ret, i;
+    if (!psb_surface)
+        goto dump_out;
+    if (pf == NULL)
+        if ((pf = fopen("/home/dump.yuv", "w+")) == NULL)
+            printf("Open yuv file fails\n");
+
+    ret = psb_buffer_map(buf, &data);
+
+    if (ret)
+        printf("Map buffer fail\n");
+
+    for (i = 0; i < obj_surface->height_r; i++) {
+        fwrite(data, 1, obj_surface->width_r, pf);
+        data += psb_surface->stride;
+    }
+
+    buffer = malloc(obj_surface->height_r * obj_surface->width_r);
+    if (!buffer)
+        printf("Alloc chroma buffer fail\n");
+
+    header = buffer;
+    chroma = data;
+    for (i = 0; i < obj_surface->height_r / 2; i++) {
+        int j;
+        for (j = 0; j < obj_surface->width_r / 2; j++) {
+            *buffer++ = data[j*2];
+        }
+        data += psb_surface->stride;
+    }
+
+    data = chroma;
+    for (i = 0; i < obj_surface->height_r / 2; i++) {
+        int j;
+        for (j = 0; j < obj_surface->width_r / 2; j++) {
+            *buffer++ = data[j*2 + 1];
+        }
+        data += psb_surface->stride;
+    }
+
+    fwrite(header, obj_surface->height_r / 2, obj_surface->width_r, pf);
+    free(header);
+    psb_buffer_unmap(buf);
+dump_out:
+    ;
+}
+
+
 /*
  * The source rectangle of the video is defined by (src_x, src_y, src_w, src_h).
  * The dest rectangle of the video is defined by (drw_x, drw_y, drw_w, drw_h).
@@ -824,10 +990,10 @@ i830_display_video(
 static int I830PutImage(
     VADriverContextP ctx,
     VASurfaceID surface,
-    short src_x, short src_y,
-    short src_w, short src_h,
-    short drw_x, short drw_y,
-    short drw_w, short drw_h,
+    int src_x, int src_y,
+    int src_w, int src_h,
+    int drw_x, int drw_y,
+    int drw_w, int drw_h,
     int fourcc, int flags,
     int overlayId,
     int pipeId)
@@ -837,7 +1003,6 @@ static int I830PutImage(
     int width, height;
     int top, left, npixels;
     int pitch = 0, pitch2 = 0;
-    short tmp;
     unsigned int pre_add;
     unsigned int gtt_ofs;
     struct _WsbmBufferObject *drm_buf;
@@ -850,59 +1015,6 @@ static int I830PutImage(
     if (NULL == obj_surface)
         return 1;
 
-#if 0
-    if (pipeId == 0) {
-        psb_surface = obj_surface->psb_surface_rotate;
-        psb_buffer_p buf = &psb_surface->buf;
-        unsigned char *data, *chroma, *buffer, *header;
-        static FILE *pf = NULL;
-        int ret, i;
-        if (!psb_surface)
-            goto dump_out;
-        if (pf == NULL)
-            if ((pf = fopen("/home/dump.yuv", "w+")) == NULL)
-                printf("Open yuv file fails\n");
-
-        ret = psb_buffer_map(buf, &data);
-
-        if (ret)
-            printf("Map buffer fail\n");
-
-        for (i = 0; i < obj_surface->height_r; i++) {
-            fwrite(data, 1, obj_surface->width_r, pf);
-            data += psb_surface->stride;
-        }
-
-        buffer = malloc(obj_surface->height_r * obj_surface->width_r);
-        if (!buffer)
-            printf("Alloc chroma buffer fail\n");
-
-        header = buffer;
-        chroma = data;
-        for (i = 0; i < obj_surface->height_r / 2; i++) {
-            int j;
-            for (j = 0; j < obj_surface->width_r / 2; j++) {
-                *buffer++ = data[j*2];
-            }
-            data += psb_surface->stride;
-        }
-
-        data = chroma;
-        for (i = 0; i < obj_surface->height_r / 2; i++) {
-            int j;
-            for (j = 0; j < obj_surface->width_r / 2; j++) {
-                *buffer++ = data[j*2 + 1];
-            }
-            data += psb_surface->stride;
-        }
-
-        fwrite(header, obj_surface->height_r / 2, obj_surface->width_r, pf);
-        free(header);
-        psb_buffer_unmap(buf);
-dump_out:
-        ;
-    }
-#endif
     pPriv = (PsbPortPrivPtr)(&driver_data->coverlay_priv);
 
     switch (fourcc) {
@@ -920,52 +1032,17 @@ dump_out:
      * and for oold also?
      */
     psb_surface = obj_surface->psb_surface;
+    I830PutImageFlipRotateSurface(ctx, obj_surface,
+                                  &src_w, &src_h, &width, &height,
+                                  &psb_surface, pipeId);
 
-    if (pipeId == PIPEA) {
-        if (driver_data->local_rotation != VA_ROTATION_NONE) {
-            psb_surface = obj_surface->psb_surface_rotate;
-            width = obj_surface->width_r;
-            height = obj_surface->height_r;
-            if (driver_data->local_rotation != VA_ROTATION_180) {
-                tmp = src_w;
-                src_w = src_h;
-                src_h = tmp;
-            }
-        }
-        if ((driver_data->mipi0_rotation == VA_ROTATION_NONE) ||
-            (driver_data->mipi0_rotation == VA_ROTATION_180)) {
-            pPriv->width_save = pPriv->display_width;
-            pPriv->height_save = pPriv->display_height;
-        } else {
-            pPriv->width_save = pPriv->display_height;
-            pPriv->height_save = pPriv->display_width;
-        }
-        pPriv->rotation = driver_data->mipi0_rotation;
-    } else if (pipeId == PIPEB) {
-        if (driver_data->extend_rotation != VA_ROTATION_NONE) {
-            psb_surface = obj_surface->psb_surface_rotate;
-            width = obj_surface->width_r;
-            height = obj_surface->height_r;
-            if (driver_data->extend_rotation != VA_ROTATION_180) {
-                tmp = src_w;
-                src_w = src_h;
-                src_h = tmp;
-            }
-        }
-        if ((driver_data->hdmi_rotation == VA_ROTATION_NONE) ||
-            (driver_data->hdmi_rotation == VA_ROTATION_180)) {
-            pPriv->width_save = pPriv->extend_display_width;
-            pPriv->height_save = pPriv->extend_display_height;
-        } else {
-            pPriv->width_save = pPriv->extend_display_height;
-            pPriv->height_save = pPriv->extend_display_width;
-        }
-        pPriv->rotation = driver_data->hdmi_rotation;
+    if ((pipeId == PIPEB) && (driver_data->extend_rotation != VA_ROTATION_NONE) &&
+        (NULL == psb_surface)) {
+        /*BZ:9432. rotate surface may not be ready, so we have to discard this frame.*/
+        psb__information_message("Android HDMI video mode: discard this frame if rotate surface hasn't be ready.\n");
+
+        return 1;
     }
-
-    if (!psb_surface)
-        psb_surface = obj_surface->psb_surface;
-
     width = (width <= 1920) ? width : 1920;
 
     /* If dst width and height are less than 1/8th the src size, the
@@ -1070,6 +1147,15 @@ dump_out:
         drm_buf = psb_surface->buf.drm_buf;
         gtt_ofs = wsbmBOOffsetHint(drm_buf) & 0x0FFFFFFF;
 
+        /*skip pad bytes.*/
+        if (driver_data->local_rotation == VA_ROTATION_90) {
+            left += ((src_w + 0xf) & ~0xf) - src_w;
+        } else if (driver_data->local_rotation == VA_ROTATION_270) {
+            top += ((src_h + 0xf) & ~0xf) - src_h;
+        } else if (driver_data->local_rotation == VA_ROTATION_180) {
+            left += ((src_w + 0xf) & ~0xf) - src_w;
+            top += ((src_h + 0xf) & ~0xf) - src_h;
+        }
         pPriv->YBuf0offset = pre_add + gtt_ofs  + top * pitch2 + left;
         pPriv->YBuf1offset = pPriv->YBuf0offset;
         pPriv->UBuf0offset = pre_add + gtt_ofs + (pitch2  * height) + top * (pitch2 / 2) + left;
@@ -1149,8 +1235,7 @@ static void psbPortPrivCreate(PsbPortPrivPtr pPriv)
 static void
 psbPortPrivDestroy(VADriverContextP ctx, PsbPortPrivPtr pPriv)
 {
-    if (pPriv->overlayA_enabled)
-        I830StopVideo(ctx);
+    I830StopVideo(ctx);
 
     wsbmBOUnmap(pPriv->wsbo[0]);
     wsbmBOUnreference(&pPriv->wsbo[0]);
@@ -1163,7 +1248,7 @@ psbPortPrivDestroy(VADriverContextP ctx, PsbPortPrivPtr pPriv)
     pPriv->p_iep_lite_context = NULL;
 }
 
-static PsbPortPrivPtr
+static int
 psbSetupImageVideoOverlay(VADriverContextP ctx, PsbPortPrivPtr pPriv)
 {
     INIT_DRIVER_DATA;
@@ -1251,17 +1336,35 @@ out_err_bo0:
     wsbmBOUnreference(&pPriv->wsbo[0]);
 
 out_err:
-    return 0;
+    return -1;
 }
 
 int psb_coverlay_init(VADriverContextP ctx)
 {
     INIT_DRIVER_DATA;
     PsbPortPrivPtr pPriv = &driver_data->coverlay_priv;
+    struct drm_psb_register_rw_arg regs;
+    int ret;
 
     memset(pPriv, 0, sizeof(PsbPortPrivRec));
     pPriv->is_mfld = IS_MFLD(driver_data);
-    psbSetupImageVideoOverlay(ctx, pPriv);
+
+    ret = psbSetupImageVideoOverlay(ctx, pPriv);
+    if (ret != 0) {
+        psb__error_message("psb_coverlay_init : Create overlay cmd buffer failed.\n");
+        return -1;
+    }
+
+    if (pPriv->is_mfld && driver_data->is_android) {
+        psb__information_message("Android ExtVideo: set PIPEB(HDMI)display plane on the bottom.\n");
+
+        memset(&regs, 0, sizeof(regs));
+        regs.display_read_mask = REGRWBITS_DSPBCNTR;
+        drmCommandWriteRead(driver_data->drm_fd, DRM_PSB_REGISTER_RW, &regs, sizeof(regs));
+        regs.display.dspcntr_b |= DISPPLANE_BOTTOM;
+        regs.display_write_mask = REGRWBITS_DSPBCNTR;
+        drmCommandWriteRead(driver_data->drm_fd, DRM_PSB_REGISTER_RW, &regs, sizeof(regs));
+    }
 
     I830ResetVideo(ctx, pPriv);
     I830UpdateGamma(ctx, pPriv);
@@ -1279,6 +1382,18 @@ int psb_coverlay_deinit(VADriverContextP ctx)
 {
     INIT_DRIVER_DATA;
     PsbPortPrivPtr pPriv = &driver_data->coverlay_priv;
+    struct drm_psb_register_rw_arg regs;
+
+    if (pPriv->is_mfld && driver_data->is_android) {
+        psb__information_message("Android ExtVideo: set PIPEB(HDMI)display plane normal.\n");
+
+        memset(&regs, 0, sizeof(regs));
+        regs.display_read_mask = REGRWBITS_DSPBCNTR;
+        drmCommandWriteRead(driver_data->drm_fd, DRM_PSB_REGISTER_RW, &regs, sizeof(regs));
+        regs.display.dspcntr_b &= ~DISPPLANE_BOTTOM;
+        regs.display_write_mask = REGRWBITS_DSPBCNTR;
+        drmCommandWriteRead(driver_data->drm_fd, DRM_PSB_REGISTER_RW, &regs, sizeof(regs));
+    }
 
     psbPortPrivDestroy(ctx, pPriv);
 

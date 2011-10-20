@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -29,6 +29,7 @@
   */
 
 #include <stdio.h>
+#include <unistd.h>
 #include <math.h>
 
 #include <psb_drm.h>
@@ -54,6 +55,7 @@
 #define INIT_DRIVER_DATA    psb_driver_data_p driver_data = (psb_driver_data_p) ctx->pDriverData;
 #define INIT_OUTPUT_PRIV    psb_x11_output_p output = (psb_x11_output_p)(((psb_driver_data_p)ctx->pDriverData)->ws_priv)
 #define SURFACE(id) ((object_surface_p) object_heap_lookup( &driver_data->surface_heap, id ))
+#define SUBPIC(id)  ((object_subpic_p) object_heap_lookup( &driver_data->subpic_heap, id ))
 
 #define Degree (2*PI / 360.0)
 #define PI 3.1415927
@@ -153,7 +155,7 @@ static unsigned long PVRCalculateStride(unsigned long widthInPixels, unsigned in
     return ((ulActiveLinelenInPixels * bitsPerPixel) + 7) >> 3;
 }
 
-static int pvr_context_create(void **pvr_ctx)
+static int pvr_context_create(unsigned char **pvr_ctx)
 {
     int ret = 0;
     int pvr_devices = PVR2DEnumerateDevices(0);
@@ -192,19 +194,23 @@ out:
     return ret;
 }
 
-void psb_ctexture_init(VADriverContextP ctx)
+void psb_fix_drmfd_closesequence(psb_driver_data_p driver_data)
+{
+    driver_data->dup_drm_fd = dup(driver_data->drm_fd);
+}
+
+
+int psb_ctexture_init(VADriverContextP ctx)
 {
     INIT_DRIVER_DATA;
-#ifndef ANDROID
-    INIT_OUTPUT_PRIV;
-#endif
 
     struct psb_texture_s *texture_priv = &driver_data->ctexture_priv;
     int i, ret;
 
-    ret = pvr_context_create(&texture_priv->hPVR2DContext);
+    ret = pvr_context_create(&driver_data->hPVR2DContext);
     if (ret != PVR2D_OK) {
         psb__error_message("%s(): null PVR context!!", __func__);
+        return ret;
     }
 
     texture_priv->video_transfermatrix = PSB_VideoTransferMatrix_BT709;
@@ -226,7 +232,7 @@ void psb_ctexture_init(VADriverContextP ctx)
     texture_priv->gamma2 = 0x202020;
     texture_priv->gamma1 = 0x101010;
     texture_priv->gamma0 = 0x080808;
-#ifndef ANDROID
+
     texture_priv->dri_init_flag = 0;
     texture_priv->drawable_update_flag = 0;
     texture_priv->extend_dri_init_flag = 0;
@@ -237,14 +243,8 @@ void psb_ctexture_init(VADriverContextP ctx)
     texture_priv->desth_save = 0;
     texture_priv->local_rotation_save = -1;
     texture_priv->extend_rotation_save = -1;
-    output->output_drawable = 0;
-    output->extend_drawable = 0;
-    for (i = 0; i < VIDEO_BUFFER_NUM; i++) {
-        texture_priv->videoBuf[i] = NULL;
-        texture_priv->subpicBuf[i] = NULL;
-        texture_priv->wrapped_surface_id[i] = -1;
-        texture_priv->wrapped_subpic_id[i] = -1;
-    }
+    texture_priv->dri_drawable = NULL;
+    texture_priv->extend_dri_drawable = NULL;
 
     for (i = 0; i < DRI2_BLIT_BUFFERS_NUM; i++) {
         texture_priv->blt_meminfo[i] = NULL;
@@ -255,50 +255,33 @@ void psb_ctexture_init(VADriverContextP ctx)
         texture_priv->flip_meminfo[i] = NULL;
 
     texture_priv->blt_meminfo_pixmap = NULL;
-#endif
+
     for (i = 0; i < 6; i++)
         texture_priv->pal_meminfo[i] = NULL;
 
     psb_setup_coeffs(texture_priv);
+    psb_fix_drmfd_closesequence(driver_data);
+
+    return 0;
 }
 
 void psb_ctexture_deinit(VADriverContextP ctx)
 {
     INIT_DRIVER_DATA;
-#ifndef ANDROID
-    INIT_OUTPUT_PRIV;
-#endif
     PVR2DERROR ePVR2DStatus;
     int i;
 
     struct psb_texture_s *texture_priv = &driver_data->ctexture_priv;
-#ifndef ANDROID
-    for (i = 0; i < VIDEO_BUFFER_NUM; i++) {
-        if (texture_priv->videoBuf[i]) {
-            ePVR2DStatus = PVR2DMemFree(texture_priv->hPVR2DContext, texture_priv->videoBuf[i]);
-            if (ePVR2DStatus != PVR2D_OK)
-                psb__error_message("%s: PVR2DMemFree error %d\n", __FUNCTION__, ePVR2DStatus);
-        }
-
-        if (texture_priv->subpicBuf[i]) {
-            ePVR2DStatus = PVR2DMemFree(texture_priv->hPVR2DContext, texture_priv->subpicBuf[i]);
-            if (ePVR2DStatus != PVR2D_OK)
-                psb__error_message("%s: PVR2DMemFree error %d\n", __FUNCTION__, ePVR2DStatus);
-        }
-
-        texture_priv->wrapped_surface_id[i] = -1;
-        texture_priv->wrapped_subpic_id[i] = -1;
-    }
 
     if (texture_priv->blt_meminfo_pixmap) {
-        ePVR2DStatus = PVR2DMemFree(texture_priv->hPVR2DContext, texture_priv->blt_meminfo_pixmap);
+        ePVR2DStatus = PVR2DMemFree(driver_data->hPVR2DContext, texture_priv->blt_meminfo_pixmap);
         if (ePVR2DStatus != PVR2D_OK)
             psb__error_message("%s: PVR2DMemFree error %d\n", __FUNCTION__, ePVR2DStatus);
     }
 
     for (i = 0; i < DRI2_BLIT_BUFFERS_NUM; i++) {
         if (texture_priv->blt_meminfo[i]) {
-            ePVR2DStatus = PVR2DMemFree(texture_priv->hPVR2DContext, texture_priv->blt_meminfo[i]);
+            ePVR2DStatus = PVR2DMemFree(driver_data->hPVR2DContext, texture_priv->blt_meminfo[i]);
             if (ePVR2DStatus != PVR2D_OK)
                 psb__error_message("%s: PVR2DMemFree error %d\n", __FUNCTION__, ePVR2DStatus);
             texture_priv->blt_meminfo[i] = NULL;
@@ -307,7 +290,7 @@ void psb_ctexture_deinit(VADriverContextP ctx)
 
     for (i = 0; i < DRI2_FLIP_BUFFERS_NUM; i++) {
         if (texture_priv->flip_meminfo[i]) {
-            ePVR2DStatus = PVR2DMemFree(texture_priv->hPVR2DContext, texture_priv->flip_meminfo[i]);
+            ePVR2DStatus = PVR2DMemFree(driver_data->hPVR2DContext, texture_priv->flip_meminfo[i]);
             if (ePVR2DStatus != PVR2D_OK)
                 psb__error_message("%s: PVR2DMemFree error %d\n", __FUNCTION__, ePVR2DStatus);
             texture_priv->flip_meminfo[i] = NULL;
@@ -316,39 +299,32 @@ void psb_ctexture_deinit(VADriverContextP ctx)
 
     for (i = 0; i < DRI2_BLIT_BUFFERS_NUM; i++) {
         if (texture_priv->extend_blt_meminfo[i]) {
-            ePVR2DStatus = PVR2DMemFree(texture_priv->hPVR2DContext, texture_priv->extend_blt_meminfo[i]);
+            ePVR2DStatus = PVR2DMemFree(driver_data->hPVR2DContext, texture_priv->extend_blt_meminfo[i]);
             if (ePVR2DStatus != PVR2D_OK)
                 psb__error_message("%s: PVR2DMemFree error %d\n", __FUNCTION__, ePVR2DStatus);
             texture_priv->extend_blt_meminfo[i] = NULL;
         }
     }
 
-    if (output->extend_drawable) {
-        XDestroyWindow(ctx->native_dpy, output->extend_drawable);
-        output->extend_drawable = 0;
-    }
-#endif
 
     for (i = 0; i < 6; i++) {
         if (texture_priv->pal_meminfo[i]) {
-            ePVR2DStatus = PVR2DMemFree(texture_priv->hPVR2DContext, texture_priv->pal_meminfo[i]);
+            ePVR2DStatus = PVR2DMemFree(driver_data->hPVR2DContext, texture_priv->pal_meminfo[i]);
             if (ePVR2DStatus != PVR2D_OK)
                 psb__error_message("%s: PVR2DMemFree error %d\n", __FUNCTION__, ePVR2DStatus);
             texture_priv->pal_meminfo[i] = NULL;
         }
     }
 
-#ifndef ANDROID
-    if (texture_priv->hPVR2DContext) {
-	ePVR2DStatus = PVR2DDestroyDeviceContext(texture_priv->hPVR2DContext);
-	if (ePVR2DStatus != PVR2D_OK)
-	    psb__error_message("%s: PVR2DMemFree error %d\n", __FUNCTION__, ePVR2DStatus);
-	texture_priv->hPVR2DContext = NULL;
+    if (driver_data->hPVR2DContext) {
+        ePVR2DStatus = PVR2DDestroyDeviceContext(driver_data->hPVR2DContext);
+        if (ePVR2DStatus != PVR2D_OK)
+            psb__error_message("%s: PVR2DMemFree error %d\n", __FUNCTION__, ePVR2DStatus);
+        driver_data->hPVR2DContext = NULL;
     }
-#endif
 
-    (void)texture_priv;
-
+    if (driver_data->dup_drm_fd)
+        close(driver_data->dup_drm_fd);
 }
 
 /* calculate subpicture size according to the downscale situation of both main and subpicture bitstream */
@@ -383,23 +359,21 @@ static void psb_calculate_subpic_size(int surf_width, int surf_height, int dst_w
 
 static PPVR2DMEMINFO psb_check_subpic_buffer(psb_driver_data_p driver_data, PsbVASurfaceRec* surface_subpic)
 {
-    int i, j;
+    unsigned int i, j;
     unsigned char* tmp_buffer;
     unsigned char tmp;
-
-    struct psb_texture_s *texture_priv = &driver_data->ctexture_priv;
     PVR2DERROR ePVR2DStatus;
 
     /* Find and return the wrapped buffer index */
     for (i = 0; i < VIDEO_BUFFER_NUM; i++) {
-        if (texture_priv->wrapped_subpic_id[i] == surface_subpic->subpic_id && texture_priv->subpicBuf[i]) {
-            return texture_priv->subpicBuf[i];
+        if (driver_data->wrapped_subpic_id[i] == surface_subpic->subpic_id && driver_data->subpicBuf[i]) {
+            return driver_data->subpicBuf[i];
         }
     }
 
     /* Wrap a un-wrapped buffer and return */
     for (i = 0; i < VIDEO_BUFFER_NUM; i++) {
-        if (texture_priv->wrapped_subpic_id[i] == -1) {
+        if (driver_data->wrapped_subpic_id[i] == VA_INVALID_ID) {
             tmp_buffer = NULL;
             tmp_buffer = wsbmBOMap(surface_subpic->bo, WSBM_ACCESS_READ | WSBM_ACCESS_WRITE);
             for (j = 0; j < surface_subpic->size; j = j + 4096) {
@@ -408,18 +382,19 @@ static PPVR2DMEMINFO psb_check_subpic_buffer(psb_driver_data_p driver_data, PsbV
                     *(tmp_buffer + j) = 0;
             }
 
-            ePVR2DStatus = PVR2DMemWrap(texture_priv->hPVR2DContext,
+            ePVR2DStatus = PVR2DMemWrap(driver_data->hPVR2DContext,
                                         tmp_buffer,
                                         0,
                                         surface_subpic->size,
                                         NULL,
-                                        &texture_priv->subpicBuf[i]);
+                                        &driver_data->subpicBuf[i]);
             if (ePVR2DStatus != PVR2D_OK) {
                 psb__error_message("%s: PVR2DMemWrap error %d\n", __FUNCTION__, ePVR2DStatus);
+                return NULL;
             }
 
-            texture_priv->wrapped_subpic_id[i] = surface_subpic->subpic_id;
-            return texture_priv->subpicBuf[i];
+            driver_data->wrapped_subpic_id[i] = surface_subpic->subpic_id;
+            return driver_data->subpicBuf[i];
         }
     }
 
@@ -431,27 +406,65 @@ static PPVR2DMEMINFO psb_check_subpic_buffer(psb_driver_data_p driver_data, PsbV
     return NULL;
 }
 
-static PPVR2DMEMINFO psb_check_video_buffer(psb_driver_data_p driver_data, VASurfaceID surface)
+
+void psb_init_surface_pvr2dbuf(psb_driver_data_p driver_data)
+{
+    int i;
+    for (i = 0; i < VIDEO_BUFFER_NUM; i++) {
+        driver_data->videoBuf[i] = NULL;
+        driver_data->subpicBuf[i] = NULL;
+        driver_data->wrapped_surface_id[i] = VA_INVALID_ID;
+        driver_data->wrapped_subpic_id[i] = VA_INVALID_ID;
+    }
+
+}
+
+void psb_free_surface_pvr2dbuf(psb_driver_data_p driver_data)
+{
+    int i;
+    PVR2DERROR ePVR2DStatus;
+
+    for (i = 0; i < VIDEO_BUFFER_NUM; i++) {
+        if ((driver_data->wrapped_surface_id[i] != VA_INVALID_ID) && driver_data->videoBuf[i]) {
+            ePVR2DStatus = PVR2DMemFree(driver_data->hPVR2DContext, driver_data->videoBuf[i]);
+            if (ePVR2DStatus != PVR2D_OK)
+                psb__error_message("%s: PVR2DMemFree error %d\n", __FUNCTION__, ePVR2DStatus);
+        }
+
+        if ((driver_data->wrapped_subpic_id[i] != VA_INVALID_ID) && driver_data->subpicBuf[i]) {
+            ePVR2DStatus = PVR2DMemFree(driver_data->hPVR2DContext, driver_data->subpicBuf[i]);
+            if (ePVR2DStatus != PVR2D_OK)
+                psb__error_message("%s: PVR2DMemFree error %d\n", __FUNCTION__, ePVR2DStatus);
+        }
+
+        driver_data->wrapped_surface_id[i] = VA_INVALID_ID;
+        driver_data->wrapped_subpic_id[i] = -1;
+
+        driver_data->videoBuf[i] = NULL;
+        driver_data->subpicBuf[i] = NULL;
+    }
+}
+
+
+static PPVR2DMEMINFO psb_wrap_surface_pvr2dbuf(psb_driver_data_p driver_data, VASurfaceID surface)
 {
     int i, j;
     unsigned char* tmp_buffer;
     unsigned char tmp;
-
-    struct psb_texture_s *texture_priv = &driver_data->ctexture_priv;
     object_surface_p obj_surface = SURFACE(surface);
     psb_surface_p psb_surface = obj_surface->psb_surface;
     PVR2DERROR ePVR2DStatus;
 
     /* Find and return the wrapped buffer index */
     for (i = 0; i < VIDEO_BUFFER_NUM; i++) {
-        if (texture_priv->wrapped_surface_id[i] == surface && texture_priv->videoBuf[i]) {
-            return texture_priv->videoBuf[i];
+        if (driver_data->wrapped_surface_id[i] == surface && driver_data->videoBuf[i]) {
+            return driver_data->videoBuf[i];
         }
     }
 
     /* Wrap a un-wrapped buffer and return */
     for (i = 0; i < VIDEO_BUFFER_NUM; i++) {
-        if (texture_priv->wrapped_surface_id[i] == -1) {
+        if (driver_data->wrapped_surface_id[i] == VA_INVALID_ID) {
             tmp_buffer = NULL;
             tmp_buffer = wsbmBOMap(psb_surface->buf.drm_buf, WSBM_ACCESS_READ | WSBM_ACCESS_WRITE);
             for (j = 0; j < psb_surface->size; j = j + 4096) {
@@ -460,18 +473,18 @@ static PPVR2DMEMINFO psb_check_video_buffer(psb_driver_data_p driver_data, VASur
                     *(tmp_buffer + j) = 0;
             }
 
-            ePVR2DStatus = PVR2DMemWrap(texture_priv->hPVR2DContext,
+            ePVR2DStatus = PVR2DMemWrap(driver_data->hPVR2DContext,
                                         tmp_buffer,
                                         0,
                                         psb_surface->size,
                                         NULL,
-                                        &texture_priv->videoBuf[i]);
+                                        &driver_data->videoBuf[i]);
             if (ePVR2DStatus != PVR2D_OK) {
                 psb__error_message("%s: PVR2DMemWrap error %d\n", __FUNCTION__, ePVR2DStatus);
             }
 
-            texture_priv->wrapped_surface_id[i] = surface;
-            return texture_priv->videoBuf[i];
+            driver_data->wrapped_surface_id[i] = surface;
+            return driver_data->videoBuf[i];
         }
     }
 
@@ -483,25 +496,15 @@ static PPVR2DMEMINFO psb_check_video_buffer(psb_driver_data_p driver_data, VASur
     return NULL;
 }
 
-#ifndef ANDROID
 void psb_putsurface_textureblit(
-    VADriverContextP ctx, PPVR2DMEMINFO pDstMeminfo, VASurfaceID surface, int src_x, int src_y, int src_w,
+    VADriverContextP ctx, unsigned char *dst, VASurfaceID surface, int src_x, int src_y, int src_w,
     int src_h, int dst_x, int dst_y, int dst_w, int dst_h, unsigned int subtitle,
     int width, int height,
     int src_pitch, struct _WsbmBufferObject * src_buf,
-    unsigned int placement)
-#else
-void psb_putsurface_textureblit(
-    VADriverContextP ctx, unsigned char * data, VASurfaceID surface, int src_x, int src_y, int src_w,
-    int src_h, int dst_x, int dst_y, int dst_w, int dst_h,
-    int width, int height,
-    int src_pitch, struct _WsbmBufferObject * src_buf,
-    unsigned int placement)
-#endif
+    unsigned int placement, int wrap_dst)
 {
-#ifndef ANDROID
     INIT_DRIVER_DATA;
-    int i;
+    unsigned int i;
     unsigned char *tmp_palette;
     struct psb_texture_s *texture_priv = &driver_data->ctexture_priv;
     object_surface_p obj_surface;
@@ -512,6 +515,7 @@ void psb_putsurface_textureblit(
     PVR2DERROR ePVR2DStatus;
     PPVR2DMEMINFO pVaVideoSubpicMemInfo;
     PPVR2DMEMINFO pVaVideoMemInfo;
+    PPVR2DMEMINFO pDstMeminfo;
 
     src_pitch = (src_pitch + 0x3) & ~0x3;
 
@@ -540,37 +544,41 @@ void psb_putsurface_textureblit(
         sBltVP.bCoeffsGiven  = 1;
     }
 
-    pVaVideoMemInfo = psb_check_video_buffer(driver_data, surface);
-    if (!pVaVideoMemInfo)
+    pVaVideoMemInfo = psb_wrap_surface_pvr2dbuf(driver_data, surface);
+    if (!pVaVideoMemInfo) {
         psb__error_message("%s: Failed to get source PVR2DMEMINFO!\n", __func__);
+        return;
+    }
 
     /* wrap the dest source */
     /* FIXME: this is wrap for rgb565 */
-#ifdef ANDROID
-    PVR2DMEMINFO *pDstMeminfo;
-    ePVR2DStatus = PVR2DMemWrap(texture_priv->hPVR2DContext,
-                                data,
-                                0,
-                                (dst_w * dst_h * 2),
-                                NULL,
-                                &pDstMeminfo);
-    if (ePVR2DStatus != PVR2D_OK) {
-        psb__error_message("%s: PVR2DMemWrap error %d\n", __FUNCTION__, ePVR2DStatus);
+    if (wrap_dst == 0) {
+
+        pDstMeminfo = (PPVR2DMEMINFO)dst;
+        if (IS_MRST(driver_data))
+            sBltVP.sDst.Stride = PVRCalculateStride(((struct dri_drawable*)texture_priv->dri_drawable)->width, 32, 32);
+        if (IS_MFLD(driver_data))
+            sBltVP.sDst.Stride = PVRCalculateStride(((struct dri_drawable*)texture_priv->dri_drawable)->width, 32, 8);
+        sBltVP.sDst.Format = PVR2D_ARGB8888;
+
+    } else {
+        ePVR2DStatus = PVR2DMemWrap(driver_data->hPVR2DContext,
+                                    dst,
+                                    0,
+                                    (dst_w * dst_h * 2),
+                                    NULL,
+                                    &pDstMeminfo);
+        if (ePVR2DStatus != PVR2D_OK) {
+            psb__error_message("%s: PVR2DMemWrap error %d\n", __FUNCTION__, ePVR2DStatus);
+            return;
+        }
+
+        /* FIXME: this wrong, how to get system pitch */
+        sBltVP.sDst.Stride = dst_w * 2;//align_to(dst_w, 64);
+        sBltVP.sDst.Format = PVR2D_RGB565;
     }
-#endif
     sBltVP.sDst.pSurfMemInfo = pDstMeminfo;
     sBltVP.sDst.SurfOffset   = 0;
-#ifndef ANDROID
-    if (IS_MFLD(driver_data))
-        sBltVP.sDst.Stride = PVRCalculateStride(dst_w, 32, 8);
-    if (IS_MRST(driver_data))
-        sBltVP.sDst.Stride = PVRCalculateStride(dst_w, 32, 32);
-    sBltVP.sDst.Format = PVR2D_ARGB8888;
-#else
-    /* FIXME: this wrong, how to get system pitch */
-    sBltVP.sDst.Stride = dst_w * 2;//align_to(dst_w, 64);
-    sBltVP.sDst.Format = PVR2D_RGB565;
-#endif
     sBltVP.sDst.SurfWidth = dst_w;
     sBltVP.sDst.SurfHeight = dst_h;
 
@@ -600,20 +608,21 @@ void psb_putsurface_textureblit(
     sBltVP.rcSource->top = src_y;
     sBltVP.rcSource->bottom = src_y + src_h;
 
-#ifdef ANDROID
-    if (obj_surface->subpic_count) {
-#else
     if (subtitle == 1 && obj_surface->subpic_count) {
-#endif
         for (i = 0; i < obj_surface->subpic_count; i++) {
-
             sBltVP.uiNumLayers += 1;
 
             psb_calculate_subpic_size(obj_surface->width, obj_surface->height, dst_w, dst_h, surface_subpic);
 
             pVaVideoSubpicMemInfo = psb_check_subpic_buffer(driver_data, surface_subpic);
-            if (!pVaVideoSubpicMemInfo)
+            if (!pVaVideoSubpicMemInfo) {
                 psb__error_message("%s: Failed to get subpic PVR2DMEMINFO!\n", __func__);
+                return;
+            }
+
+            object_subpic_p obj_subpic = SUBPIC(surface_subpic->subpic_id);
+            sBltVP.AlphaBlendingFunc = PVR2D_ALPHA_OP_GLOBAL;
+            sBltVP.subpicGlobalAlpha[i] = obj_subpic->global_alpha;
 
             sBltVP.sSrcSubpic[i].pSurfMemInfo = pVaVideoSubpicMemInfo;
             sBltVP.sSrcSubpic[i].SurfOffset = 0;
@@ -640,7 +649,7 @@ void psb_putsurface_textureblit(
             //only allocate memory once for palette
             if (surface_subpic->fourcc == VA_FOURCC_AI44) {
                 if (!texture_priv->pal_meminfo[i]) {
-                    ePVR2DStatus = PVR2DMemAlloc(texture_priv->hPVR2DContext, 16 * sizeof(unsigned int), 0, 0, &texture_priv->pal_meminfo[i]);
+                    ePVR2DStatus = PVR2DMemAlloc(driver_data->hPVR2DContext, 16 * sizeof(unsigned int), 0, 0, &texture_priv->pal_meminfo[i]);
                     if (ePVR2DStatus != PVR2D_OK) {
                         psb__error_message("%s: PVR2DMemAlloc error %d\n", __FUNCTION__, ePVR2DStatus);
                         return;
@@ -656,19 +665,23 @@ void psb_putsurface_textureblit(
         }
     }
 
-    ePVR2DStatus = PVR2DBltVideo(texture_priv->hPVR2DContext, &sBltVP);
-    if (ePVR2DStatus != PVR2D_OK) {
+//#ifndef ANDROID /* MRST Android not enable this API, uncomment for MRST */
+    ePVR2DStatus = PVR2DBltVideo(driver_data->hPVR2DContext, &sBltVP);
+//#endif
+
+    if (ePVR2DStatus != PVR2D_OK)
         psb__error_message("%s: failed to do PVR2DBltVideo with error code %d\n",
                            __FUNCTION__, ePVR2DStatus);
+
+    if (wrap_dst) {
+        ePVR2DStatus = PVR2DMemFree(driver_data->hPVR2DContext, pDstMeminfo);
+        if (ePVR2DStatus != PVR2D_OK)
+            psb__error_message("%s: PVR2DMemFree error %d\n", __FUNCTION__, ePVR2DStatus);
     }
 
-#ifdef ANDROID
-    ePVR2DStatus = PVR2DMemFree(texture_priv->hPVR2DContext, pDstMeminfo);
-    if (ePVR2DStatus != PVR2D_OK) {
-        psb__error_message("%s: PVR2DMemFree error %d\n", __FUNCTION__, ePVR2DStatus);
-    }
-#endif
-#endif
+    driver_data->cur_displaying_surface = VA_INVALID_SURFACE;
+    driver_data->last_displaying_surface = VA_INVALID_SURFACE;
+    obj_surface->display_timestamp = 0;
 }
 
 static void

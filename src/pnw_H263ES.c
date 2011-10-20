@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -78,10 +78,21 @@ static void pnw_H263ES_QueryConfigAttributes(
 static VAStatus pnw_H263ES_ValidateConfig(
     object_config_p obj_config)
 {
-    VAStatus vaStatus = VA_STATUS_SUCCESS;
-    psb__information_message("pnw_H263ES_ValidateConfig\n");
+    int i;
+    /* Check all attributes */
+    for (i = 0; i < obj_config->attrib_count; i++) {
+        switch (obj_config->attrib_list[i].type) {
+        case VAConfigAttribRTFormat:
+            /* Ignore */
+            break;
+        case VAConfigAttribRateControl:
+            break;
+        default:
+            return VA_STATUS_ERROR_ATTR_NOT_SUPPORTED;
+        }
+    }
 
-    return vaStatus;
+    return VA_STATUS_SUCCESS;
 }
 
 
@@ -258,8 +269,8 @@ static VAStatus pnw__H263ES_process_picture_param(context_ENC_p ctx, object_buff
     ctx->dest_surface = SURFACE(pBuffer->reconstructed_picture);
     ctx->coded_buf = BUFFER(pBuffer->coded_buf);
 
-    ASSERT(ctx->Width == pBuffer->picture_width);
-    ASSERT(ctx->Height == pBuffer->picture_height);
+    ctx->RawWidth = pBuffer->picture_width;
+    ctx->RawHeight = pBuffer->picture_height;
 
     /* Insert do_header command here */
 
@@ -286,8 +297,8 @@ static VAStatus pnw__H263ES_process_picture_param(context_ENC_p ctx, object_buff
                                      pBuffer->picture_type,
                                      SourceFormatType,
                                      ctx->sRCParams.FrameRate,
-                                     ctx->Width,
-                                     ctx->Height);
+                                     ctx->RawWidth,
+                                     ctx->RawHeight);
 
     pnw_cmdbuf_insert_command_package(ctx->obj_context,
                                       ctx->ParallelCores - 1, /* Send to the last core as this will complete first */
@@ -312,7 +323,7 @@ static VAStatus pnw__H263ES_process_slice_param(context_ENC_p ctx, object_buffer
     VAEncSliceParameterBuffer *pBuffer;
     pnw_cmdbuf_p cmdbuf = ctx->obj_context->pnw_cmdbuf;
     PIC_PARAMS *psPicParams = (PIC_PARAMS *)(cmdbuf->pic_params_p);
-    int i;
+    unsigned int i;
     int slice_param_idx;
 
     ASSERT(obj_buffer->type == VAEncSliceParameterBufferType);
@@ -367,8 +378,7 @@ static VAStatus pnw__H263ES_process_slice_param(context_ENC_p ctx, object_buffer
                    HEADER_SIZE);
 
             pnw__H263_prepare_GOBslice_header(
-                cmdbuf->header_mem_p + ctx->slice_header_ofs
-                + ctx->obj_context->slice_count * HEADER_SIZE,
+                cmdbuf->header_mem_p + ctx->slice_header_ofs + ctx->obj_context->slice_count * HEADER_SIZE,
                 ctx->obj_context->slice_count,
                 ctx->obj_context->frame_count);
 

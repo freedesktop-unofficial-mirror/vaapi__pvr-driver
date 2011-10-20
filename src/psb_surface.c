@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -32,8 +32,6 @@
 #include "psb_def.h"
 #include "psb_surface.h"
 
-#include <RAR/rar.h>
-
 
 /*
  * Create surface
@@ -43,7 +41,7 @@ VAStatus psb_surface_create(psb_driver_data_p driver_data,
                             psb_surface_p psb_surface /* out */
                            )
 {
-    int ret;
+    int ret = 0;
 
     if (fourcc == VA_FOURCC_NV12) {
         if ((width <= 0) || (width > 5120) || (height <= 0) || (height > 5120)) {
@@ -96,8 +94,12 @@ VAStatus psb_surface_create(psb_driver_data_p driver_data,
 
     if (protected == 0)
         ret = psb_buffer_create(driver_data, psb_surface->size, psb_bt_surface, &psb_surface->buf);
-    else
-        ret = psb_buffer_create_rar(driver_data, psb_surface->size, &psb_surface->buf);
+    else {
+        if (IS_MFLD(driver_data)) { /* as normal */
+            ret = psb_buffer_create(driver_data, psb_surface->size, psb_bt_surface, &psb_surface->buf);
+            psb_surface->extra_info[6] = 1; /* set protected flag */
+        }
+    }
 
     return ret ? VA_STATUS_ERROR_ALLOCATION_FAILED : VA_STATUS_SUCCESS;
 }
@@ -131,7 +133,41 @@ VAStatus psb_surface_create_for_userptr(
     psb_surface->size = size;
     psb_surface->extra_info[4] = VA_FOURCC_NV12;
 
-    ret = psb_buffer_create(driver_data, psb_surface->size, psb_bt_surface, &psb_surface->buf);
+    ret = psb_buffer_create(driver_data, psb_surface->size, psb_bt_cpu_vpu_shared, &psb_surface->buf);
+
+    return ret ? VA_STATUS_ERROR_ALLOCATION_FAILED : VA_STATUS_SUCCESS;
+}
+
+VAStatus psb_surface_create_from_kbuf(
+    psb_driver_data_p driver_data,
+    int width, int height,
+    unsigned size, /* total buffer size need to be allocated */
+    unsigned int fourcc, /* expected fourcc */
+    int kbuf_handle,
+    unsigned int luma_stride, /* luma stride, could be width aligned with a special value */
+    unsigned int chroma_u_stride, /* chroma stride */
+    unsigned int chroma_v_stride,
+    unsigned int luma_offset, /* could be 0 */
+    unsigned int chroma_u_offset, /* UV offset from the beginning of the memory */
+    unsigned int chroma_v_offset,
+    psb_surface_p psb_surface /* out */
+)
+{
+    int ret;
+
+    if ((width <= 0) || (width > 5120) || (height <= 0) || (height > 5120))
+        return VA_STATUS_ERROR_ALLOCATION_FAILED;
+
+    psb_surface->stride_mode = STRIDE_NA;
+    psb_surface->stride = luma_stride;
+
+
+    psb_surface->luma_offset = luma_offset;
+    psb_surface->chroma_offset = chroma_u_offset;
+    psb_surface->size = size;
+    psb_surface->extra_info[4] = VA_FOURCC_NV12;
+
+    ret = psb_kbuffer_reference(driver_data, &psb_surface->buf, kbuf_handle);
 
     return ret ? VA_STATUS_ERROR_ALLOCATION_FAILED : VA_STATUS_SUCCESS;
 }
@@ -216,7 +252,7 @@ VAStatus psb_surface_create_camera_from_ub(psb_driver_data_p driver_data,
  */
 VAStatus psb_surface_set_chroma(psb_surface_p psb_surface, int chroma)
 {
-    void *surface_data;
+    unsigned char *surface_data;
     int ret = psb_buffer_map(&psb_surface->buf, &surface_data);
 
     if (ret) return VA_STATUS_ERROR_UNKNOWN;
@@ -261,4 +297,41 @@ VAStatus psb_surface_query_status(psb_surface_p psb_surface, VASurfaceStatus *st
         *status = VASurfaceRendering;
 
     return VA_STATUS_SUCCESS;
+}
+
+/*
+ * Set current displaying surface info to kernel
+ * so that other component can access it in another process
+ */
+int psb_surface_set_displaying(psb_driver_data_p driver_data,
+                               int width, int height,
+                               psb_surface_p psb_surface)
+{
+    struct drm_lnc_video_getparam_arg arg;
+    struct drm_video_displaying_frameinfo value;
+    int ret = 0;
+
+    if (psb_surface) {
+        value.buf_handle = (uint32_t)(wsbmKBufHandle(wsbmKBuf(psb_surface->buf.drm_buf)));
+        value.width = width;
+        value.height = height;
+        value.size = psb_surface->size;
+        value.format = psb_surface->extra_info[4];
+        value.luma_stride = psb_surface->stride;
+        value.chroma_u_stride = psb_surface->stride;
+        value.chroma_v_stride = psb_surface->stride;
+        value.luma_offset = psb_surface->luma_offset;
+        value.chroma_u_offset = psb_surface->chroma_offset;
+        value.chroma_v_offset = psb_surface->chroma_offset;
+    } else /* clean kernel displaying surface info */
+        memset(&value, 0, sizeof(value));
+
+    arg.key = IMG_VIDEO_SET_DISPLAYING_FRAME;
+    arg.value = (uint64_t)((unsigned long) & value);
+    ret = drmCommandWriteRead(driver_data->drm_fd, driver_data->getParamIoctlOffset,
+                              &arg, sizeof(arg));
+    if (ret != 0)
+        psb__error_message("IMG_VIDEO_SET_DISPLAYING_FRAME failed\n");
+
+    return ret;
 }

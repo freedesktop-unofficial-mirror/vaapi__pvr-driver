@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 Intel Corporation. All Rights Reserved.
- * Copyright (c) Imagination Technologies Limited, UK 
+ * Copyright (c) Imagination Technologies Limited, UK
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -291,7 +291,7 @@ void lnc_cmdbuf_add_relocation(lnc_cmdbuf_p cmdbuf,
     reloc->dst_buffer = dst_buffer;
     cmdbuf->reloc_idx++;
 
-    ASSERT(((void *)(cmdbuf->reloc_idx)) < RELOC_END(cmdbuf));
+    ASSERT(((unsigned char *)(cmdbuf->reloc_idx)) < RELOC_END(cmdbuf));
 }
 
 /*
@@ -395,8 +395,6 @@ lncDRMCmdBuf(int fd, int ioctl_offset, psb_buffer_p *buffer_list, int buffer_cou
     ca.engine = engine;
     ca.fence_flags = fence_flags;
     ca.fence_arg = (uint64_t)((unsigned long)fence_rep);
-    ca.damage = damage;
-
 
     do {
         ret = drmCommandWrite(fd, ioctl_offset, &ca, sizeof(ca));
@@ -464,7 +462,7 @@ lnc_fence_wait(psb_driver_data_p driver_data,
 
     fence = wsbmFenceCreate(driver_data->fence_mgr, fence_rep->fence_class,
                             fence_rep->fence_type,
-                            (void *)fence_rep->handle,
+                            (unsigned char *)fence_rep->handle,
                             0);
     if (fence)
         *status = wsbmFenceFinish(fence, fence_rep->fence_type, 0);
@@ -535,10 +533,10 @@ int lnc_context_flush_cmdbuf(object_context_p obj_context)
     unsigned int reloc_offset;
     unsigned int num_relocs;
     int ret;
-    unsigned int cmdbuffer_size = (void *) cmdbuf->cmd_idx - cmdbuf->cmd_start; /* In bytes */
+    unsigned int cmdbuffer_size = (unsigned char *) cmdbuf->cmd_idx - cmdbuf->cmd_start; /* In bytes */
 
     ASSERT(cmdbuffer_size < CMD_SIZE);
-    ASSERT((void *) cmdbuf->cmd_idx < CMD_END(cmdbuf));
+    ASSERT((unsigned char *) cmdbuf->cmd_idx < CMD_END(cmdbuf));
     /* LOCK */
     ret = LOCK_HARDWARE(driver_data);
     if (ret) {
@@ -549,7 +547,7 @@ int lnc_context_flush_cmdbuf(object_context_p obj_context)
 
     /* Now calculate the total number of relocations */
     reloc_offset = cmdbuf->reloc_base - cmdbuf->cmd_base;
-    num_relocs = (((void *) cmdbuf->reloc_idx) - cmdbuf->reloc_base) / sizeof(struct drm_psb_reloc);
+    num_relocs = (((unsigned char *) cmdbuf->reloc_idx) - cmdbuf->reloc_base) / sizeof(struct drm_psb_reloc);
 
     lnc_cmdbuf_unmap(cmdbuf);
 

@@ -21,30 +21,30 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ *
+ * Authors:
+ *    Jason Hu <jason.hu@intel.com>
  */
 
+#ifndef _PSB_OUTPUT_ANDROID_H_
+#define _PSB_OUTPUT_ANDROID_H_
 
-#ifndef _LLDMA_DEFS_H_
-#define _LLDMA_DEFS_H_
+typedef struct _psb_android_output_s {
+    /* information of output display */
+    unsigned short screen_width;
+    unsigned short screen_height;
 
-typedef enum {
-    LLDMA_TYPE_VLC_TABLE ,
-    LLDMA_TYPE_BITSTREAM ,
-    LLDMA_TYPE_RESIDUAL ,
-    LLDMA_TYPE_RENDER_BUFF_MC,
-    LLDMA_TYPE_RENDER_BUFF_VLD,
+    /* for memory heap base used by putsurface */
+    unsigned char* heap_addr;
 
-    LLDMA_TYPE_MPEG4_FESTATE_SAVE,
-    LLDMA_TYPE_MPEG4_FESTATE_RESTORE,
+    void* psb_HDMIExt_info; /* HDMI extend video mode info */
+    int sf_composition; /* surfaceflinger compostion */
+    /* save dest box here */
+    short destx;
+    short desty;
+    unsigned short destw;
+    unsigned short desth;
+    int new_destbox;
+} psb_android_output_s, *psb_android_output_p;
 
-    LLDMA_TYPE_H264_PRELOAD_SAVE,
-    LLDMA_TYPE_H264_PRELOAD_RESTORE,
-
-    LLDMA_TYPE_VC1_PRELOAD_SAVE,
-    LLDMA_TYPE_VC1_PRELOAD_RESTORE,
-
-    LLDMA_TYPE_MEM_SET,
-
-} LLDMA_TYPE;
-
-#endif /* _LLDMA_DEFS_H_ */
+#endif /*_PSB_OUTPUT_ANDROID_H_*/

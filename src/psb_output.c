@@ -8,11 +8,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -31,6 +31,7 @@
 #ifndef ANDROID
 #include <X11/Xutil.h>
 #include <X11/extensions/Xrandr.h>
+#include <va/va_dricommon.h>
 #include "x11/psb_x11.h"
 #include "x11/psb_xrandr.h"
 #endif
@@ -41,6 +42,7 @@
 #include "psb_surface.h"
 #include "psb_buffer.h"
 #include "psb_surface_ext.h"
+#include "pnw_rotate.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
@@ -51,9 +53,6 @@
 #include <sys/ioctl.h>
 
 #define INIT_DRIVER_DATA        psb_driver_data_p driver_data = (psb_driver_data_p) ctx->pDriverData;
-#ifndef ANDROID
-#define INIT_OUTPUT_PRIV    psb_x11_output_p output = (psb_x11_output_p)(((psb_driver_data_p)ctx->pDriverData)->ws_priv)
-#endif
 
 #define SURFACE(id)     ((object_surface_p) object_heap_lookup( &driver_data->surface_heap, id ))
 #define BUFFER(id)  ((object_buffer_p) object_heap_lookup( &driver_data->buffer_heap, id ))
@@ -71,21 +70,21 @@ typedef struct _subpic_surface {
 
 static VAImageFormat psb__SubpicFormat[] = {
     psb__ImageRGBA,
-    psb__ImageAYUV,
-    psb__ImageAI44
+    //psb__ImageAYUV,
+    //psb__ImageAI44
 };
 
 static VAImageFormat psb__CreateImageFormat[] = {
     psb__ImageNV12,
     psb__ImageRGBA,
-    psb__ImageAYUV,
-    psb__ImageAI44,
+    //psb__ImageAYUV,
+    //psb__ImageAI44,
     psb__ImageYV16
 };
 
-void *psb_x11_output_init(VADriverContextP ctx);
+unsigned char *psb_x11_output_init(VADriverContextP ctx);
 VAStatus psb_x11_output_deinit(VADriverContextP ctx);
-void *psb_android_output_init(VADriverContextP ctx);
+unsigned char *psb_android_output_init(VADriverContextP ctx);
 VAStatus psb_android_output_deinit(VADriverContextP ctx);
 
 int psb_coverlay_init(VADriverContextP ctx);
@@ -94,62 +93,53 @@ int psb_coverlay_deinit(VADriverContextP ctx);
 VAStatus psb_initOutput(VADriverContextP ctx)
 {
     INIT_DRIVER_DATA;
-    void *ws_priv = NULL;
+    unsigned char *ws_priv = NULL;
     char *fps = NULL;
+    char env_value[1024];
 
     pthread_mutex_init(&driver_data->output_mutex, NULL);
 
-    if (getenv("PSB_VIDEO_PUTSURFACE_DUMMY")) {
+    if (psb_parse_config("PSB_VIDEO_PUTSURFACE_DUMMY", &env_value[0]) == 0) {
         psb__information_message("vaPutSurface: dummy mode, return directly\n");
         driver_data->dummy_putsurface = 0;
 
         return VA_STATUS_SUCCESS;
     }
 
-    if (getenv("PSB_VIDEO_EXTEND_FULLSCREEN")) {
-        driver_data->extend_fullscreen = 1;
-    }
-
-    if (getenv("PSB_VIDEO_NOTRD") || IS_MRST(driver_data)) {
-        psb__information_message("Force not to start psb xrandr thread.\n");
-        driver_data->use_xrandr_thread = 0;
-    } else {
-        psb__information_message("By default, use psb xrandr thread.\n");
-        driver_data->use_xrandr_thread = 1;
-    }
-
-    fps = getenv("PSB_VIDEO_FPS");
-    if (fps != NULL) {
-        driver_data->fixed_fps = atoi(fps);
+    if (psb_parse_config("PSB_VIDEO_FPS", &env_value[0]) == 0) {
+        driver_data->fixed_fps = atoi(env_value);
         psb__information_message("Throttling at FPS=%d\n", driver_data->fixed_fps);
     } else
         driver_data->fixed_fps = 0;
 
+    driver_data->outputmethod_checkinterval = 1;
+    if (psb_parse_config("PSB_VIDEO_INTERVAL", &env_value[0]) == 0) {
+        driver_data->outputmethod_checkinterval = atoi(env_value);
+        psb__information_message("Check output method at %d frames interval\n",
+                                 driver_data->outputmethod_checkinterval);
+    }
+
     driver_data->cur_displaying_surface = VA_INVALID_SURFACE;
     driver_data->last_displaying_surface = VA_INVALID_SURFACE;
 
+    psb_InitRotate(ctx);
+
 #ifdef ANDROID
     ws_priv = psb_android_output_init(ctx);
+    driver_data->is_android = 1;
 #else
     ws_priv = psb_x11_output_init(ctx);
+    driver_data->is_android = 0;
 #endif
     driver_data->ws_priv = ws_priv;
 
-    /* use client overlay  */
-    if (driver_data->coverlay == 1) {
-#ifndef ANDROID
-        psb_x11_output_p output = (psb_x11_output_p)(((psb_driver_data_p)ctx->pDriverData)->ws_priv);
-        output->pClipBoxList = NULL;
-        output->ui32NumClipBoxList = 0;
-        output->frame_count = 0;
-        output->bIsVisible = 0;
-#endif
-        psb_coverlay_init(ctx);
-    }
 
     //use client textureblit
-    if (driver_data->ctexture == 1)
-        psb_ctexture_init(ctx);
+    if (driver_data->ctexture == 1) {
+        int ret = psb_ctexture_init(ctx);
+        if (ret != 0)
+            driver_data->ctexture = 0;
+    }
 
     /*
     //use texture streaming
@@ -167,18 +157,15 @@ VAStatus psb_deinitOutput(
     INIT_DRIVER_DATA;
 
     //use client textureblit
-    if (driver_data->ctexture == 1) {
+    if (driver_data->ctexture == 1)
         psb_ctexture_deinit(ctx);
+
+    if (driver_data->coverlay_init) {
+        psb_coverlay_deinit(ctx);
+        driver_data->coverlay_init = 0;
     }
 
 #ifndef ANDROID
-    INIT_OUTPUT_PRIV;
-
-    if (driver_data->coverlay == 1) {
-        psb_x11_freeWindowClipBoxList(output->pClipBoxList);
-        psb_coverlay_deinit(ctx);
-    }
-
     psb_x11_output_deinit(ctx);
 #else
     psb_android_output_deinit(ctx);
@@ -191,6 +178,8 @@ VAStatus psb_deinitOutput(
     if (driver_data->ctexstreaming == 1)
         psb_ctexstreaing_deinit(ctx);
     */
+    /* clean the displaying surface information in kernel */
+    psb_surface_set_displaying(driver_data, 0, 0, NULL);
 
     pthread_mutex_destroy(&driver_data->output_mutex);
 
@@ -229,8 +218,8 @@ static void psb__VAImageCheckRegion(
     int *src_y,
     int *dest_x,
     int *dest_y,
-    unsigned int *width,
-    unsigned int *height
+    int *width,
+    int *height
 )
 {
     /* check for image */
@@ -307,6 +296,11 @@ VAStatus psb_CreateImage(
                                       sizeof(psb__CreateImageFormat) / sizeof(VAImageFormat));
     if (img_fmt == NULL)
         return VA_STATUS_ERROR_UNKNOWN;
+
+    if (NULL == image) {
+        vaStatus = VA_STATUS_ERROR_INVALID_PARAMETER;
+        return vaStatus;
+    }
 
     imageID = object_heap_allocate(&driver_data->image_heap);
     obj_image = IMAGE(imageID);
@@ -444,6 +438,11 @@ VAStatus psb_DeriveImage(
     if (NULL == obj_surface) {
         vaStatus = VA_STATUS_ERROR_INVALID_SURFACE;
         DEBUG_FAILURE;
+        return vaStatus;
+    }
+
+    if (NULL == image) {
+        vaStatus = VA_STATUS_ERROR_INVALID_PARAMETER;
         return vaStatus;
     }
 
@@ -720,10 +719,11 @@ VAStatus psb_GetImage(
         return vaStatus;
     }
 
-    psb__VAImageCheckRegion(obj_surface, &obj_image->image, &src_x, &src_y, &dest_x, &dest_y, &width, &height);
+    psb__VAImageCheckRegion(obj_surface, &obj_image->image, &src_x, &src_y, &dest_x, &dest_y,
+                            (int *)&width, (int *)&height);
 
     psb_surface_p psb_surface = obj_surface->psb_surface;
-    void *surface_data;
+    unsigned char *surface_data;
     ret = psb_buffer_map(&psb_surface->buf, &surface_data);
     if (ret) {
         return VA_STATUS_ERROR_UNKNOWN;
@@ -736,7 +736,7 @@ VAStatus psb_GetImage(
         return vaStatus;
     }
 
-    void *image_data;
+    unsigned char *image_data;
     ret = psb_buffer_map(obj_buffer->psb_buffer, &image_data);
     if (ret) {
         psb__error_message("Map buffer failed\n");
@@ -750,7 +750,7 @@ VAStatus psb_GetImage(
     switch (obj_image->image.format.fourcc) {
     case VA_FOURCC_NV12: {
         unsigned char *source_y, *src_uv, *dst_y, *dst_uv;
-        int i;
+        unsigned int i;
         /* copy Y plane */
         dst_y = image_data;
         source_y = surface_data + y * psb_surface->stride + x;
@@ -842,10 +842,11 @@ static VAStatus psb_PutImage2(
         return vaStatus;
     }
 
-    psb__VAImageCheckRegion(obj_surface, &obj_image->image, &src_x, &src_y, &dest_x, &dest_y, &width, &height);
+    psb__VAImageCheckRegion(obj_surface, &obj_image->image, &src_x, &src_y, &dest_x, &dest_y,
+                            (int *)&width, (int *)&height);
 
     psb_surface_p psb_surface = obj_surface->psb_surface;
-    void *surface_data;
+    unsigned char *surface_data;
     ret = psb_buffer_map(&psb_surface->buf, &surface_data);
     if (ret) {
         return VA_STATUS_ERROR_UNKNOWN;
@@ -858,7 +859,7 @@ static VAStatus psb_PutImage2(
         return vaStatus;
     }
 
-    void *image_data;
+    unsigned char *image_data;
     ret = psb_buffer_map(obj_buffer->psb_buffer, &image_data);
     if (ret) {
         psb_buffer_unmap(&psb_surface->buf);
@@ -869,7 +870,7 @@ static VAStatus psb_PutImage2(
 
     switch (obj_image->image.format.fourcc) {
     case VA_FOURCC_NV12: {
-        char *source_y, *src_uv, *dst_y, *dst_uv;
+        unsigned char *source_y, *src_uv, *dst_y, *dst_uv;
         unsigned int i;
 
         /* copy Y plane */
@@ -949,8 +950,8 @@ static void psb__VAImageCheckRegion2(
     unsigned int *src_height,
     int *dest_x,
     int *dest_y,
-    unsigned int *dest_width,
-    unsigned int *dest_height
+    int *dest_width,
+    int *dest_height
 )
 {
     /* check for image */
@@ -968,8 +969,8 @@ static void psb__VAImageCheckRegion2(
     if (*dest_y < 0) *dest_y = 0;
     if (*dest_y > surface->height) *dest_y = surface->height - 1;
 
-    if (((*dest_width) + (*dest_x)) > surface->width) *dest_width = surface->width - *dest_x;
-    if (((*dest_height) + (*dest_y)) > surface->height) *dest_height = surface->height - *dest_x;
+    if (((*dest_width) + (*dest_x)) > (int)surface->width) *dest_width = surface->width - *dest_x;
+    if (((*dest_height) + (*dest_y)) > (int)surface->height) *dest_height = surface->height - *dest_x;
 }
 
 VAStatus psb_PutImage(
@@ -1017,10 +1018,10 @@ VAStatus psb_PutImage(
 
     psb__VAImageCheckRegion2(obj_surface, &obj_image->image,
                              &src_x, &src_y, &src_width, &src_height,
-                             &dest_x, &dest_y, &dest_width, &dest_height);
+                             &dest_x, &dest_y, (int *)&dest_width, (int *)&dest_height);
 
     psb_surface_p psb_surface = obj_surface->psb_surface;
-    void *surface_data;
+    unsigned char *surface_data;
     ret = psb_buffer_map(&psb_surface->buf, &surface_data);
     if (ret) {
         return VA_STATUS_ERROR_UNKNOWN;
@@ -1033,7 +1034,7 @@ VAStatus psb_PutImage(
         return vaStatus;
     }
 
-    void *image_data;
+    unsigned char *image_data;
     ret = psb_buffer_map(obj_buffer->psb_buffer, &image_data);
     if (ret) {
         psb_buffer_unmap(&psb_surface->buf);
@@ -1050,9 +1051,9 @@ VAStatus psb_PutImage(
         float yratio = (float) src_height / dest_height;
 
         /* dst_y/dst_uv: Y/UV plane of destination */
-        dst_y = surface_data + dest_y * psb_surface->stride + dest_x;
-        dst_uv = surface_data + psb_surface->stride * obj_surface->height
-                 + (dest_y / 2) * psb_surface->stride + dest_x;
+        dst_y = (unsigned char *)(surface_data + dest_y * psb_surface->stride + dest_x);
+        dst_uv = (unsigned short *)(surface_data + psb_surface->stride * obj_surface->height
+                                    + (dest_y / 2) * psb_surface->stride + dest_x);
 
         for (j = 0; j < dest_height; j++)  {
             unsigned char *dst_y_tmp = dst_y;
@@ -1079,7 +1080,7 @@ VAStatus psb_PutImage(
             dst_y += psb_surface->stride;
 
             if (j & 1)
-                dst_uv = (unsigned short *)((void *)dst_uv + psb_surface->stride);
+                dst_uv = (unsigned short *)((unsigned char *)dst_uv + psb_surface->stride);
         }
         break;
     }
@@ -1187,10 +1188,10 @@ static VAStatus psb__LinkSubpictIntoSurface(
 
     if (found == 0) { /* new node, link into the list */
         if (NULL == obj_surface->subpictures) {
-            obj_surface->subpictures = surface_subpic;
+            obj_surface->subpictures = (void *)surface_subpic;
         } else { /* insert as the head */
-            surface_subpic->next = obj_surface->subpictures;
-            obj_surface->subpictures = surface_subpic;
+            surface_subpic->next = (PsbVASurfacePtr)obj_surface->subpictures;
+            obj_surface->subpictures = (void *)surface_subpic;
         }
         obj_surface->subpic_count++;
     }
@@ -1227,10 +1228,10 @@ static VAStatus psb__LinkSurfaceIntoSubpict(
     subpic_surface->next = NULL;
 
     if (NULL == obj_subpic->surfaces) {
-        obj_subpic->surfaces = subpic_surface;
+        obj_subpic->surfaces = (void *)subpic_surface;
     } else { /* insert as the head */
-        subpic_surface->next = obj_subpic->surfaces;
-        obj_subpic->surfaces = subpic_surface;
+        subpic_surface->next = (subpic_surface_p)obj_subpic->surfaces;
+        obj_subpic->surfaces = (void *)subpic_surface;
     }
 
     return VA_STATUS_SUCCESS;
@@ -1259,7 +1260,7 @@ static VAStatus psb__DelinkSubpictFromSurface(
 
     if (found == 1) {
         if (pre_surface_subpic == NULL) { /* remove the first node */
-            obj_surface->subpictures = surface_subpic->next;
+            obj_surface->subpictures = (void *)surface_subpic->next;
         } else {
             pre_surface_subpic->next = surface_subpic->next;
         }
@@ -1294,7 +1295,7 @@ static VAStatus psb__DelinkSurfaceFromSubpict(
 
     if (found == 1) {
         if (pre_subpic_surface == NULL) { /* remove the first node */
-            obj_subpic->surfaces = subpic_surface->next;
+            obj_subpic->surfaces = (void *)subpic_surface->next;
         } else {
             pre_subpic_surface->next = subpic_surface->next;
         }
@@ -1379,6 +1380,7 @@ VAStatus psb_CreateSubpicture(
     obj_subpic->subpic_id = subpicID;
     obj_subpic->image_id = obj_image->image.image_id;
     obj_subpic->surfaces = NULL;
+    obj_subpic->global_alpha = 255;
 
     obj_image->subpic_ref ++;
 
@@ -1508,7 +1510,17 @@ VAStatus psb_SetSubpictureChromakey(
     INIT_DRIVER_DATA;
     (void)driver_data;
     /* TODO */
-    return VA_STATUS_ERROR_UNKNOWN;
+    if ((chromakey_mask < chromakey_min) || (chromakey_mask > chromakey_max)) {
+        psb__error_message("Invalid chromakey value %d, chromakey value should between min and max\n", chromakey_mask);
+        return VA_STATUS_ERROR_INVALID_PARAMETER;
+    }
+    object_subpic_p obj_subpic = SUBPIC(subpicture);
+    if (NULL == obj_subpic) {
+        psb__error_message("Invalid subpicture value %d\n", subpicture);
+        return VA_STATUS_ERROR_INVALID_SUBPICTURE;
+    }
+
+    return VA_STATUS_SUCCESS;
 }
 
 VAStatus psb_SetSubpictureGlobalAlpha(
@@ -1518,9 +1530,21 @@ VAStatus psb_SetSubpictureGlobalAlpha(
 )
 {
     INIT_DRIVER_DATA;
-    (void)driver_data;
-    /* TODO */
-    return VA_STATUS_ERROR_UNKNOWN;
+
+    if (global_alpha < 0 || global_alpha > 1) {
+        psb__error_message("Invalid global alpha value %07f, global alpha value should between 0 and 1\n", global_alpha);
+        return VA_STATUS_ERROR_INVALID_PARAMETER;
+    }
+
+    object_subpic_p obj_subpic = SUBPIC(subpicture);
+    if (NULL == obj_subpic) {
+        psb__error_message("Invalid subpicture value %d\n", subpicture);
+        return VA_STATUS_ERROR_INVALID_SUBPICTURE;
+    }
+
+    obj_subpic->global_alpha = global_alpha * 255;
+
+    return VA_STATUS_SUCCESS;
 }
 
 
@@ -1762,6 +1786,98 @@ static  VADisplayAttribute psb__DisplayAttribute[] = {
         0x00000000,
         VA_DISPLAY_ATTRIB_GETTABLE | VA_DISPLAY_ATTRIB_SETTABLE
     },
+    {
+        VADisplayAttribRotation,
+        VA_ROTATION_NONE,
+        VA_ROTATION_270,
+        VA_ROTATION_NONE,
+        VA_DISPLAY_ATTRIB_GETTABLE | VA_DISPLAY_ATTRIB_SETTABLE
+    },
+    {
+        VADisplayAttribOutofLoopDeblock,
+        VA_OOL_DEBLOCKING_FALSE,
+        VA_OOL_DEBLOCKING_TRUE,
+        VA_OOL_DEBLOCKING_FALSE,
+        VA_DISPLAY_ATTRIB_GETTABLE | VA_DISPLAY_ATTRIB_SETTABLE
+    },
+    {
+        VADisplayAttribBLEBlackMode,
+        0x00000000,
+        0xffffffff,
+        0x00000000,
+        VA_DISPLAY_ATTRIB_GETTABLE | VA_DISPLAY_ATTRIB_SETTABLE
+    },
+    {
+        VADisplayAttribBLEWhiteMode,
+        0x00000000,
+        0xffffffff,
+        0x00000000,
+        VA_DISPLAY_ATTRIB_GETTABLE | VA_DISPLAY_ATTRIB_SETTABLE
+    },
+
+    {
+        VADisplayAttribBlueStretch,
+        0x00000000,
+        0xffffffff,
+        0x00000000,
+        VA_DISPLAY_ATTRIB_GETTABLE | VA_DISPLAY_ATTRIB_SETTABLE
+    },
+    {
+        VADisplayAttribSkinColorCorrection,
+        0x00000000,
+        0xffffffff,
+        0x00000000,
+        VA_DISPLAY_ATTRIB_GETTABLE | VA_DISPLAY_ATTRIB_SETTABLE
+    },
+    {
+        VADisplayAttribBlendColor,
+        0x00000000,
+        0xffffffff,
+        0x00000000,
+        VA_DISPLAY_ATTRIB_GETTABLE | VA_DISPLAY_ATTRIB_SETTABLE
+    },
+    {
+        VADisplayAttribOverlayColorKey,
+        0x00000000,
+        0xffffffff,
+        0x00000000,
+        VA_DISPLAY_ATTRIB_GETTABLE | VA_DISPLAY_ATTRIB_SETTABLE
+    },
+    {
+        VADisplayAttribOverlayAutoPaintColorKey,
+        0x00000000,
+        0xffffffff,
+        0x00000000,
+        VA_DISPLAY_ATTRIB_GETTABLE | VA_DISPLAY_ATTRIB_SETTABLE
+    },
+    {
+        VADisplayAttribCSCMatrix,
+        0x00000000,
+        0xffffffff,
+        0x00000000,
+        VA_DISPLAY_ATTRIB_GETTABLE | VA_DISPLAY_ATTRIB_SETTABLE
+    },
+    {
+        VADisplayAttribRenderDevice,
+        0x00000000,
+        0xffffffff,
+        0x00000000,
+        VA_DISPLAY_ATTRIB_GETTABLE | VA_DISPLAY_ATTRIB_SETTABLE
+    },
+    {
+        VADisplayAttribRenderMode,
+        0x00000000,
+        0xffffffff,
+        0x00000000,
+        VA_DISPLAY_ATTRIB_GETTABLE | VA_DISPLAY_ATTRIB_SETTABLE
+    },
+    {
+        VADisplayAttribRenderRect,
+        0x00000000,
+        0xffffffff,
+        0x00000000,
+        VA_DISPLAY_ATTRIB_GETTABLE | VA_DISPLAY_ATTRIB_SETTABLE
+    }
 };
 
 /*
@@ -1789,8 +1905,7 @@ VAStatus psb_QueryDisplayAttributes(
         return vaStatus;
     }
     *num_attributes = min(*num_attributes, PSB_MAX_DISPLAY_ATTRIBUTES);
-    memcpy(attr_list, psb__DisplayAttribute, *num_attributes);
-
+    memcpy(attr_list, psb__DisplayAttribute, (*num_attributes)*sizeof(VADisplayAttribute));
     return VA_STATUS_SUCCESS;
 }
 
@@ -1863,6 +1978,40 @@ VAStatus psb_GetDisplayAttributes(
             p->min_value = 0;
             p->max_value = 1;
             break;
+        case VADisplayAttribRotation:
+            p->value = driver_data->va_rotate = p->value;
+            p->min_value = VA_ROTATION_NONE;
+            p->max_value = VA_ROTATION_270;
+            break;
+        case VADisplayAttribOutofLoopDeblock:
+            p->value = driver_data->is_oold = p->value;
+            p->min_value = VA_OOL_DEBLOCKING_FALSE;
+            p->max_value = VA_OOL_DEBLOCKING_TRUE;
+            break;
+        case VADisplayAttribCSCMatrix:
+            p->value = driver_data->load_csc_matrix = p->value;
+            p->min_value = 0;
+            p->max_value = 255;
+            break;
+        case VADisplayAttribRenderDevice:
+            p->value = driver_data->render_device = p->value;
+            p->min_value = 0;
+            p->max_value = 255;
+            break;
+        case VADisplayAttribRenderMode:
+            p->value = driver_data->render_mode = p->value;
+            p->min_value = 0;
+            p->max_value = 255;
+            break;
+        case VADisplayAttribRenderRect:
+            ((VARectangle *)(p->value))->x = driver_data->render_rect.x = ((VARectangle *)(p->value))->x;
+            ((VARectangle *)(p->value))->y = driver_data->render_rect.y = ((VARectangle *)(p->value))->y;
+            ((VARectangle *)(p->value))->width = driver_data->render_rect.width = ((VARectangle *)(p->value))->width;
+            ((VARectangle *)(p->value))->height = driver_data->render_rect.height = ((VARectangle *)(p->value))->height;
+            p->min_value = 0;
+            p->max_value = 255;
+            break;
+
         default:
             break;
         }
@@ -1870,39 +2019,6 @@ VAStatus psb_GetDisplayAttributes(
     }
 
     return VA_STATUS_SUCCESS;
-}
-
-static int Angle2Rotation(int angle)
-{
-    angle %= 360;
-    switch (angle) {
-    case 0:
-        return VA_ROTATION_NONE;
-    case 90:
-        return VA_ROTATION_90;
-    case 180:
-        return VA_ROTATION_180;
-    case 270:
-        return VA_ROTATION_270;
-    default:
-        return -1;
-    }
-}
-
-static int Rotation2Angle(int rotation)
-{
-    switch (rotation) {
-    case VA_ROTATION_NONE:
-        return 0;
-    case VA_ROTATION_90:
-        return 90;
-    case VA_ROTATION_180:
-        return 180;
-    case VA_ROTATION_270:
-        return 270;
-    default:
-        return -1;
-    }
 }
 
 /*
@@ -1931,7 +2047,6 @@ VAStatus psb_SetDisplayAttributes(
 
     VADisplayAttribute *p = attr_list;
     int i, update_coeffs = 0;
-    int angle;
 
     if (num_attributes <= 0) {
         return VA_STATUS_ERROR_INVALID_PARAMETER;
@@ -1990,36 +2105,25 @@ VAStatus psb_SetDisplayAttributes(
             driver_data->is_oold = p->value;
             break;
         case VADisplayAttribRotation:
-            driver_data->video_rotate = p->value;
-            angle = Rotation2Angle(driver_data->video_rotate) + Rotation2Angle(driver_data->mipi0_rotation);
-            driver_data->local_rotation = Angle2Rotation(angle);
-            angle = Rotation2Angle(driver_data->video_rotate) + Rotation2Angle(driver_data->hdmi_rotation);
-            driver_data->extend_rotation = Angle2Rotation(angle);
-#ifndef ANDROID
-            if (driver_data->local_rotation == driver_data->extend_rotation) {
-                driver_data->rotate = driver_data->local_rotation;
-            } else {
-                driver_data->rotate = driver_data->video_rotate;
-                /*fallback to texblit path*/
-                driver_data->output_method = PSB_PUTSURFACE_FORCE_CTEXTURE;
-            }
-#endif
-            if (driver_data->rotate == VA_ROTATION_270)
-                driver_data->rotate = 3; /* Match with hw definition */
+            driver_data->va_rotate = p->value;
+            psb_RecalcRotate(ctx);
             break;
+
         case VADisplayAttribCSCMatrix:
             driver_data->load_csc_matrix = 1;
-            memcpy(&(driver_data->csc_matrix[0][0]), (void *)p->value, sizeof(signed int) * 9);
+            memcpy(&(driver_data->csc_matrix[0][0]), (unsigned char *)p->value, sizeof(signed int) * 9);
             break;
+
         case VADisplayAttribBlendColor:
             driver_data->blend_color = p->value;
             break;
         case VADisplayAttribOverlayColorKey:
-            driver_data->color_key = p->value;
+            overlay_priv->colorKey = driver_data->color_key = p->value;
             break;
         case VADisplayAttribOverlayAutoPaintColorKey:
             driver_data->overlay_auto_paint_color_key = p->value;
             break;
+
         case VADisplayAttribRenderDevice:
             driver_data->render_device = p->value & VA_RENDER_DEVICE_MASK;
         case VADisplayAttribRenderMode:
@@ -2028,7 +2132,7 @@ VAStatus psb_SetDisplayAttributes(
                 return VA_STATUS_ERROR_INVALID_PARAMETER;
             }
             if (((p->value & VA_RENDER_MODE_LOCAL_OVERLAY) && (p->value & VA_RENDER_MODE_LOCAL_GPU)) ||
-                    ((p->value & VA_RENDER_MODE_EXTERNAL_OVERLAY) && (p->value & VA_RENDER_MODE_EXTERNAL_GPU))) {
+                ((p->value & VA_RENDER_MODE_EXTERNAL_OVERLAY) && (p->value & VA_RENDER_MODE_EXTERNAL_GPU))) {
                 psb__error_message("%s:Invalid parameter. Conflict setting for VADisplayAttribRenderMode.\n", __FUNCTION__);
                 return VA_STATUS_ERROR_INVALID_PARAMETER;
             }
@@ -2040,6 +2144,7 @@ VAStatus psb_SetDisplayAttributes(
             driver_data->render_rect.width = ((VARectangle *)(p->value))->width;
             driver_data->render_rect.height = ((VARectangle *)(p->value))->height;
             break;
+
         default:
             break;
         }
